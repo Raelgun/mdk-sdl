@@ -335,8 +335,8 @@ public sealed class MenuItems
                 continue;
             }
 
+            // Personal tweak: hovering selects silently; the sound plays on the click only.
             _selected = i;
-            Click();
             return;
         }
     }
@@ -606,7 +606,6 @@ public sealed class MenuItems
         ClearPage();
         _ui.ScanMods();
         var s = _ui.Settings;
-        AddTitle("Mods: enhanced look");
         foreach (var mod in _ui.Mods.Mods)
         {
             var name = mod.Name.Length > MaxModName ? mod.Name[..MaxModName] : mod.Name;
