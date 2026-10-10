@@ -144,7 +144,7 @@ public sealed partial class Kurt
         var mouse = new Vector2(input.MouseX, input.MouseY) * MouseDegrees;
         Yaw += Scope.Look(turn, tilt, mouse, turbo ? Scope.Turbo.On : Scope.Turbo.Off, delta);
 
-        Scope.Wheel(input.Wheel);
+        Scope.Wheel(input.ZoomWheel);
         var zooming = Scope.UpdateZoom(Axis(input, Key.ZoomOut, Key.ZoomIn), delta);
         if (zooming == Scope.Zooming.Moving && !mixer.IsVoicePlaying(_zoomVoice))
         {
@@ -156,8 +156,9 @@ public sealed partial class Kurt
             _zoomVoice = 0;
         }
 
-        // The wheel zooms here, so it doesn't pick ammo too (kurt.gd _wheel_used).
-        if (input.Wheel != 0f)
+        // The wheel zooms here (unless it was bound to something else), so it doesn't pick ammo too
+        // (kurt.gd _wheel_used).
+        if (input.ZoomWheel != 0f)
         {
             return;
         }

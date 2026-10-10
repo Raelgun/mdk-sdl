@@ -128,6 +128,8 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
     /// <summary>One step of <paramref name="delta"/> seconds.</summary>
     public void Update(Input input, float delta)
     {
+        // The scope's own bindings (zoom, the wheel) apply while he snipes, whatever else this step does.
+        input.Scoped = Sniping;
         Invulnerable = MathF.Max(Invulnerable - delta, 0f);
         ChuteClosing = false;
         if (Frozen)

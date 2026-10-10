@@ -95,6 +95,21 @@ as-is: see the legal note.
 Not replaceable: the sky, effects' sprites (explosions, sparks), the fall's and the stream's 3D
 views, videos, the statistics pages are by name only (not exported).
 
+### Wide scope frame: `SNIPERS1_WIDE.png`
+
+The scope's frame (the inside of Kurt's helmet) is a 4:3 picture, so on a wider window it sits in
+the middle between black bars. A mod can continue it to the sides with `images/SNIPERS1_WIDE.png`
+(a name with no original, so it isn't in the export):
+
+- Make the image as high as the frame at some scale and as wide as you like, with the frame
+  (`SNIPERS1`, 640 x 480, a 4:3 picture) **centred in it at the same scale**. For 32:9 at 3x:
+  5120 x 1440, the frame 1920 x 1440 in the middle (1600 pixels on each side).
+- The game draws only the free sides of the window from it; the frame, the view's hole and the
+  gauges stay the game's own (or a mod's `SNIPERS1`), so the middle of this image doesn't matter.
+- A narrower window crops the image evenly on both sides; a window wider than the image keeps black
+  beyond it. Make it for the widest ratio you want to cover.
+- Enhanced look only, like all mods.
+
 ### Example: replace a floor texture (LEVEL3's start)
 
 ```

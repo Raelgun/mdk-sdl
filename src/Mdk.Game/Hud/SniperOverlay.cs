@@ -92,6 +92,8 @@ public sealed class SniperOverlay
     private readonly Palette _colours;
     private readonly ModImages? _mods;
     private readonly Image _frame;
+    /// <summary>A mod's wide frame (<see cref="WideImage"/>), or null; its size is in pixels.</summary>
+    private readonly Image? _wide;
     private readonly Image _mask;
     private readonly Image _cross;
     private readonly Image _gauge;
@@ -117,6 +119,7 @@ public sealed class SniperOverlay
         _mods = mods;
         var mask = SniperScreen.Mask(sprites);
         _frame = Load(FrameImage, CutView(SniperScreen.Frame(sprites), mask), Vector2.Zero);
+        _wide = LoadWide();
         _mask = Load(MaskImage, mask, Vector2.Zero);
         var cross = sprites.GetAnimation(Cross).GetFrame(0);
         _cross = Load(CanvasImages.FrameName(Cross, 0), cross.Image, new Vector2(cross.HotspotX, cross.HotspotY));
@@ -164,6 +167,8 @@ public sealed class SniperOverlay
     /// <summary>The images' names in <c>TRAVSPRT.BNI</c> (the frame and mask: SniperScreen's).</summary>
     private const string FrameImage = "SNIPERS1";
     private const string MaskImage = "SNIPERS2";
+    /// <summary>A mod-only image: the frame continued to the sides for wide windows (docs/modding.md).</summary>
+    private const string WideImage = "SNIPERS1_WIDE";
     private const string Cross = "CROSS";
     private const string GaugeImage = "SNIP_RNG";
     private const string WeaponImage = "SNIP_WEP";
@@ -174,6 +179,42 @@ public sealed class SniperOverlay
 
     /// <summary>Whether sniper mode's screen replaces the HUD.</summary>
     public bool Visible => _shown != null;
+
+    /// <summary>A mod's <see cref="WideImage"/>: no original, so a one-pixel transparent index texture
+    /// (the original look draws nothing) that the mod's image replaces in the enhanced look.</summary>
+    private Image? LoadWide()
+    {
+        var blank = new Texture { Name = WideImage, Width = 1, Height = 1, Indices = new byte[1] };
+        if (_mods?.Image(WideImage, blank, _colours) is not { } image || image.Height <= 0)
+        {
+            return null;
+        }
+
+        var id = _renderer.CreateIndexTexture(1, 1, blank.Indices);
+        _renderer.ReplaceImage(id, _palette, image.Width, image.Height, image.Rgba);
+        return new Image(id, new Vector2(image.Width, image.Height), Vector2.Zero);
+    }
+
+    /// <summary>Where the wide frame's strips go on a canvas of <paramref name="canvasWidth"/> when the
+    /// 640 x 480 screen leaves <paramref name="left"/> units free on each side: the image as high as the
+    /// canvas and centred, so its middle lines up with the screen; wider canvases than the image keep
+    /// black beyond it. Each strip: the canvas span and the image's span, both from 0 to 1 across the image.</summary>
+    public static (float From, float To, float U0, float U1)[] WideStrips(float canvasWidth, float left, float imageAspect)
+    {
+        var width = Renderer.CanvasHeight * imageAspect;
+        var edge = (canvasWidth - width) / 2f;
+        var strips = new List<(float, float, float, float)>();
+        foreach (var (from, to) in new[] { (0f, left), (canvasWidth - left, canvasWidth) })
+        {
+            var (a, b) = (MathF.Max(from, edge), MathF.Min(to, edge + width));
+            if (b > a)
+            {
+                strips.Add((a, b, (a - edge) / width, (b - edge) / width));
+            }
+        }
+
+        return [.. strips];
+    }
 
     private Image Load(string name, Texture texture, Vector2 hotspot) =>
         new(CanvasImages.Create(_renderer, _mods, name, texture, _colours, _palette), new Vector2(texture.Width, texture.Height), hotspot);
@@ -276,6 +317,7 @@ public sealed class SniperOverlay
         {
             _renderer.FillRect(new RectangleF(0f, 0f, MathF.Ceiling(left), Renderer.CanvasHeight), Black);
             _renderer.FillRect(new RectangleF(MathF.Floor(canvasWidth - left), 0f, MathF.Ceiling(left), Renderer.CanvasHeight), Black);
+            DrawWide(canvasWidth, left);
         }
 
         var screen = new Screen(_renderer, _palette, scale, left);
@@ -299,6 +341,22 @@ public sealed class SniperOverlay
         if (blink == Blink.Shown)
         {
             DrawNumber(screen, health, View + panel + new Vector2((int)panelSize.X >> 1, ((int)panelSize.Y - (int)_digits.Size.Y) >> 1));
+        }
+    }
+
+    /// <summary>A mod's wide frame in the free sides, over the black (the original screen stays as it is).</summary>
+    private void DrawWide(float canvasWidth, float left)
+    {
+        if (_wide is not { } wide)
+        {
+            return;
+        }
+
+        foreach (var (from, to, u0, u1) in WideStrips(canvasWidth, left, wide.Size.X / wide.Size.Y))
+        {
+            // Normalised source: the stand-in texture is one pixel, the mod's image has its own size.
+            _renderer.DrawImage(wide.Texture, _palette, Vector2.One, new RectangleF(u0, 0f, u1 - u0, 1f),
+                new RectangleF(from, 0f, to - from, Renderer.CanvasHeight), Vector4.One);
         }
     }
 

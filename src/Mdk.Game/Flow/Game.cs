@@ -516,6 +516,8 @@ public sealed class Game : IDisposable
     {
         _screen?.Dispose();
         _screen = null;
+        // Only a level's Kurt snipes: the scope's bindings don't carry over to the next screen.
+        _input.Scoped = false;
         _levelShot = false;
         _audio.StopAll();
         _renderer.Release(_scope);

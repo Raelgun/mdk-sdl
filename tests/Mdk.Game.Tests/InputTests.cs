@@ -146,4 +146,149 @@ public class InputTests
         Assert.Equal(2f, input.MouseX, 3);
         Assert.Equal(-2f, input.MouseY, 3);
     }
+
+    private static void Press(Input input, SDL_Scancode scancode) => input.SetKey(scancode, Input.State.Down, Repeat.No);
+
+    private static void Release(Input input, SDL_Scancode scancode) => input.SetKey(scancode, Input.State.Up, Repeat.No);
+
+    [Fact]
+    public void ZoomKeysKeepTheirDefaultsEverywhere()
+    {
+        var input = NewInput();
+        Press(input, SDL_Scancode.SDL_SCANCODE_PAGEUP);
+        Assert.True(input.IsDown(Key.ZoomIn));
+        Release(input, SDL_Scancode.SDL_SCANCODE_PAGEUP);
+
+        input.Scoped = true;
+        Press(input, SDL_Scancode.SDL_SCANCODE_PAGEDOWN);
+        Assert.True(input.IsDown(Key.ZoomOut));
+        Press(input, SDL_Scancode.SDL_SCANCODE_W);
+        Assert.True(input.IsDown(Key.Forward));
+        Assert.NotEqual("-", input.Describe(Key.ZoomIn));
+    }
+
+    [Fact]
+    public void AKeyWalksOnFootAndZoomsWhileSniping()
+    {
+        var input = NewInput();
+        Assert.True(input.Bind(Key.ZoomIn, "W"));
+        Assert.True(input.Bind(Key.ZoomOut, "S"));
+        Assert.Equal("W", input.Describe(Key.ZoomIn));
+        Assert.Equal("W", input.Describe(Key.Forward));
+
+        Press(input, SDL_Scancode.SDL_SCANCODE_W);
+        Assert.True(input.IsDown(Key.Forward));
+        Assert.False(input.IsDown(Key.ZoomIn));
+        Release(input, SDL_Scancode.SDL_SCANCODE_W);
+
+        input.Scoped = true;
+        Press(input, SDL_Scancode.SDL_SCANCODE_W);
+        Assert.True(input.IsDown(Key.ZoomIn));
+        Assert.False(input.IsDown(Key.Forward));
+        Release(input, SDL_Scancode.SDL_SCANCODE_W);
+
+        Press(input, SDL_Scancode.SDL_SCANCODE_S);
+        Assert.True(input.IsDown(Key.ZoomOut));
+        Assert.False(input.IsDown(Key.Back));
+        Release(input, SDL_Scancode.SDL_SCANCODE_S);
+
+        // The old zoom keys went to W and S, the other bindings are as they were.
+        Press(input, SDL_Scancode.SDL_SCANCODE_PAGEUP);
+        Assert.False(input.IsDown(Key.ZoomIn));
+        Press(input, SDL_Scancode.SDL_SCANCODE_A);
+        Assert.True(input.IsDown(Key.StrafeLeft));
+    }
+
+    [Fact]
+    public void AKeyHeldAcrossSnipingIsReleasedAsPressed()
+    {
+        var input = NewInput();
+        Assert.True(input.Bind(Key.ZoomIn, "W"));
+        Press(input, SDL_Scancode.SDL_SCANCODE_W);
+        Assert.True(input.IsDown(Key.Forward));
+
+        input.Scoped = true;
+        Release(input, SDL_Scancode.SDL_SCANCODE_W);
+        Assert.False(input.IsDown(Key.Forward));
+        Assert.False(input.IsDown(Key.ZoomIn));
+    }
+
+    [Fact]
+    public void BindingAZoomKeyToAnotherActionTakesItsZoomAway()
+    {
+        var input = NewInput();
+        Press(input, SDL_Scancode.SDL_SCANCODE_PAGEUP);
+        Release(input, SDL_Scancode.SDL_SCANCODE_PAGEUP);
+        Assert.True(input.Bind(Key.Jump, input.LastControl));
+        input.Scoped = true;
+        Press(input, SDL_Scancode.SDL_SCANCODE_PAGEUP);
+        Assert.True(input.IsDown(Key.Jump));
+        Assert.False(input.IsDown(Key.ZoomIn));
+    }
+
+    [Fact]
+    public void WheelZoomsWhileSnipingByDefault()
+    {
+        var input = NewInput();
+        input.Scoped = true;
+        input.AddWheel(WheelAway);
+        Assert.Equal(1f, input.ZoomWheel);
+        Assert.False(input.IsDown(Key.ItemPrevious));
+
+        input.ClearMouse();
+        input.AddWheel(WheelToward);
+        Assert.Equal(-1f, input.ZoomWheel);
+        Assert.False(input.IsDown(Key.ItemNext));
+
+        input.ClearMouse();
+        Assert.Equal(0f, input.ZoomWheel);
+        input.Scoped = false;
+        input.AddWheel(WheelAway);
+        Assert.Equal(0f, input.ZoomWheel);
+        Assert.True(input.IsDown(Key.ItemPrevious));
+    }
+
+    [Fact]
+    public void ReboundWheelDoesItsActionWhileSnipingToo()
+    {
+        var input = NewInput();
+        Assert.True(input.Bind(Key.Jump, "Wheel up"));
+        input.Scoped = true;
+        input.AddWheel(WheelAway);
+        Assert.Equal(0f, input.ZoomWheel);
+        Assert.True(input.IsDown(Key.Jump));
+
+        // The other direction was not rebound: it still zooms.
+        input.ClearMouse();
+        input.AddWheel(WheelToward);
+        Assert.Equal(-1f, input.ZoomWheel);
+    }
+
+    [Fact]
+    public void WheelBoundToAZoomActionZoomsThatWay()
+    {
+        var input = NewInput();
+        Assert.True(input.Bind(Key.ZoomOut, "Wheel up"));
+        input.Scoped = true;
+        input.AddWheel(WheelAway);
+        Assert.Equal(-1f, input.ZoomWheel);
+        Assert.False(input.IsDown(Key.ZoomOut));
+
+        // Off the scope the wheel keeps selecting items.
+        input.ClearMouse();
+        input.Scoped = false;
+        input.AddWheel(WheelAway);
+        Assert.True(input.IsDown(Key.ItemPrevious));
+    }
+
+    [Fact]
+    public void DefaultKeysRestoreTheWheelsZoom()
+    {
+        var input = NewInput();
+        Assert.True(input.Bind(Key.Jump, "Wheel up"));
+        input.ResetBindings();
+        input.Scoped = true;
+        input.AddWheel(WheelAway);
+        Assert.Equal(1f, input.ZoomWheel);
+    }
 }

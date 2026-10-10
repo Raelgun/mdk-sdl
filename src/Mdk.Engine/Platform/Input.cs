@@ -67,10 +67,6 @@ public sealed class Input
         [SDL_Scancode.SDL_SCANCODE_AC_BACK] = Key.Escape,
         [SDL_Scancode.SDL_SCANCODE_F12] = Key.Screenshot,
         [SDL_Scancode.SDL_SCANCODE_F1] = Key.Fly,
-        [SDL_Scancode.SDL_SCANCODE_PAGEUP] = Key.ZoomIn,
-        [SDL_Scancode.SDL_SCANCODE_EQUALS] = Key.ZoomIn,
-        [SDL_Scancode.SDL_SCANCODE_PAGEDOWN] = Key.ZoomOut,
-        [SDL_Scancode.SDL_SCANCODE_MINUS] = Key.ZoomOut,
         [SDL_Scancode.SDL_SCANCODE_Z] = Key.RollLeft,
         [SDL_Scancode.SDL_SCANCODE_C] = Key.RollRight,
         [SDL_Scancode.SDL_SCANCODE_T] = Key.Teleport,
@@ -78,6 +74,17 @@ public sealed class Input
         [SDL_Scancode.SDL_SCANCODE_RALT] = Key.Teleport,
         [SDL_Scancode.SDL_SCANCODE_F2] = Key.QuickSave,
         [SDL_Scancode.SDL_SCANCODE_F9] = Key.QuickLoad,
+    };
+
+    /// <summary>The scope's own bindings (its zoom): they apply while <see cref="Scoped"/>, and anywhere
+    /// else a key has no binding of its own. A key can be bound to a scope action and to another one:
+    /// the scope's wins while sniping, the other one wins otherwise.</summary>
+    private static readonly Dictionary<SDL_Scancode, Key> DefaultScopeKeys = new()
+    {
+        [SDL_Scancode.SDL_SCANCODE_PAGEUP] = Key.ZoomIn,
+        [SDL_Scancode.SDL_SCANCODE_EQUALS] = Key.ZoomIn,
+        [SDL_Scancode.SDL_SCANCODE_PAGEDOWN] = Key.ZoomOut,
+        [SDL_Scancode.SDL_SCANCODE_MINUS] = Key.ZoomOut,
     };
 
     /// <summary>The flying camera's keys: fixed, whatever the bindings (E also uses items).</summary>
@@ -160,6 +167,18 @@ public sealed class Input
     /// <summary>The bindings: the defaults, changed by <see cref="Bind"/>.</summary>
     private readonly Dictionary<SDL_Scancode, Key> _keys = new(DefaultKeys);
     private readonly Dictionary<MouseButton, Key> _buttonKeys = new(DefaultButtons);
+    /// <summary>The scope's bindings (<see cref="DefaultScopeKeys"/>): zoom.</summary>
+    private readonly Dictionary<SDL_Scancode, Key> _scopeKeys = new(DefaultScopeKeys);
+    private readonly Dictionary<MouseButton, Key> _scopeButtons = [];
+    /// <summary>Scope keys that are still the built-in ones: binding the key to another action
+    /// replaces them (an explicit scope binding is kept).</summary>
+    private readonly HashSet<SDL_Scancode> _scopeDefaultKeys = new(DefaultScopeKeys.Keys);
+    /// <summary>Wheel directions that still zoom while sniping, as they do by default: binding the
+    /// wheel to any action takes the zoom away.</summary>
+    private readonly HashSet<MouseButton> _wheelZoom = [MouseButton.WheelUp, MouseButton.WheelDown];
+    /// <summary>The action each held key or mouse button pressed, so that it is the one released.</summary>
+    private readonly Dictionary<SDL_Scancode, Key> _heldKeys = [];
+    private readonly Dictionary<MouseButton, Key> _heldButtons = [];
     private readonly HashSet<MenuKey> _menuPressed = [];
     /// <summary>The menu keys held (the sliders step again while one is held).</summary>
     private readonly HashSet<MenuKey> _menuDown = [];
@@ -194,6 +213,11 @@ public sealed class Input
     public float MouseY { get; private set; }
     /// <summary>Mouse wheel notches since the last game step: positive away from the user.</summary>
     public float Wheel { get; private set; }
+    /// <summary>The wheel notches that zoom the scope since the last game step (positive: zoom in): the
+    /// wheel only zooms while <see cref="Scoped"/>, and unless it is bound to something else.</summary>
+    public float ZoomWheel { get; private set; }
+    /// <summary>Kurt is sniping: the scope's bindings win over the others (set by the game each step).</summary>
+    public bool Scoped { get; set; }
 
     /// <summary>Mouse motion is scaled by this (the mouse sensitivity).</summary>
     public float MouseScale { get; set; } = 1f;
@@ -287,21 +311,63 @@ public sealed class Input
         }
 
         Unbind(key);
+        var scope = IsScopeAction(key);
         if (button is { } bound)
         {
-            _buttonKeys[bound] = key;
+            _wheelZoom.Remove(bound);
+            (scope ? _scopeButtons : _buttonKeys)[bound] = key;
+            return true;
+        }
+
+        if (scope)
+        {
+            _scopeKeys[scancode] = key;
+            _scopeDefaultKeys.Remove(scancode);
             return true;
         }
 
         _keys[scancode] = key;
+        if (_scopeDefaultKeys.Remove(scancode))
+        {
+            _scopeKeys.Remove(scancode);
+        }
+
         return true;
     }
+
+    /// <summary>The actions only the scope uses: its bindings are a layer of their own, so a key can
+    /// zoom while sniping and do something else (walk) otherwise.</summary>
+    private static bool IsScopeAction(Key key) => key is Key.ZoomIn or Key.ZoomOut;
+
+    /// <summary>The action of a key: the scope's binding first while sniping, else the other one first.</summary>
+    private bool TryResolve(SDL_Scancode scancode, out Key key) =>
+        Scoped
+            ? _scopeKeys.TryGetValue(scancode, out key) || _keys.TryGetValue(scancode, out key)
+            : _keys.TryGetValue(scancode, out key) || _scopeKeys.TryGetValue(scancode, out key);
+
+    /// <summary>The action of a mouse button, as <see cref="TryResolve(SDL_Scancode, out Key)"/>.</summary>
+    private bool TryResolve(MouseButton button, out Key key) =>
+        Scoped
+            ? _scopeButtons.TryGetValue(button, out key) || _buttonKeys.TryGetValue(button, out key)
+            : _buttonKeys.TryGetValue(button, out key) || _scopeButtons.TryGetValue(button, out key);
 
     /// <summary>Back to the default bindings.</summary>
     public void ResetBindings()
     {
         _keys.Clear();
         _buttonKeys.Clear();
+        _scopeKeys.Clear();
+        _scopeButtons.Clear();
+        _scopeDefaultKeys.Clear();
+        _wheelZoom.Clear();
+        _wheelZoom.Add(MouseButton.WheelUp);
+        _wheelZoom.Add(MouseButton.WheelDown);
+        foreach (var (scancode, key) in DefaultScopeKeys)
+        {
+            _scopeKeys[scancode] = key;
+            _scopeDefaultKeys.Add(scancode);
+        }
+
         foreach (var (scancode, key) in DefaultKeys)
         {
             _keys[scancode] = key;
@@ -361,7 +427,8 @@ public sealed class Input
     /// <summary>The name of a key's first binding, or "-".</summary>
     public string Describe(Key key)
     {
-        foreach (var (scancode, bound) in _keys)
+        var scope = IsScopeAction(key);
+        foreach (var (scancode, bound) in scope ? _scopeKeys : _keys)
         {
             if (bound == key)
             {
@@ -369,7 +436,7 @@ public sealed class Input
             }
         }
 
-        foreach (var (button, bound) in _buttonKeys)
+        foreach (var (button, bound) in scope ? _scopeButtons : _buttonKeys)
         {
             if (bound == key)
             {
@@ -410,9 +477,20 @@ public sealed class Input
             _keys.Remove(scancode);
         }
 
+        foreach (var scancode in _scopeKeys.Where(k => k.Value == key).Select(k => k.Key).ToList())
+        {
+            _scopeKeys.Remove(scancode);
+            _scopeDefaultKeys.Remove(scancode);
+        }
+
         foreach (var button in _buttonKeys.Where(b => b.Value == key).Select(b => b.Key).ToList())
         {
             _buttonKeys.Remove(button);
+        }
+
+        foreach (var button in _scopeButtons.Where(b => b.Value == key).Select(b => b.Key).ToList())
+        {
+            _scopeButtons.Remove(button);
         }
     }
 
@@ -422,6 +500,7 @@ public sealed class Input
         MouseX = 0f;
         MouseY = 0f;
         Wheel = 0f;
+        ZoomWheel = 0f;
         _wheel.Clear();
     }
 
@@ -433,6 +512,8 @@ public sealed class Input
         ClearMouse();
         _down.Clear();
         _buttons.Clear();
+        _heldKeys.Clear();
+        _heldButtons.Clear();
         _fly.Clear();
         _menuDown.Clear();
         _pad.Clear();
@@ -468,15 +549,25 @@ public sealed class Input
         }
 
         SetFlyKey(scancode, state);
-        if (!_keys.TryGetValue(scancode, out var key))
+        if (state == State.Up)
         {
+            // The action it pressed, even if the bindings in force have changed since (sniping).
+            if (_heldKeys.Remove(scancode, out var released))
+            {
+                _down.Remove(released);
+            }
+
             return;
         }
 
-        if (state == State.Up)
+        if (!_heldKeys.TryGetValue(scancode, out var key))
         {
-            _down.Remove(key);
-            return;
+            if (!TryResolve(scancode, out key))
+            {
+                return;
+            }
+
+            _heldKeys[scancode] = key;
         }
 
         if (_down.Add(key))
@@ -495,15 +586,24 @@ public sealed class Input
             AddClick(button);
         }
 
-        if (!_buttonKeys.TryGetValue(button, out var key))
+        if (state == State.Up)
         {
+            if (_heldButtons.Remove(button, out var released))
+            {
+                _buttons.Remove(released);
+            }
+
             return;
         }
 
-        if (state == State.Up)
+        if (!_heldButtons.TryGetValue(button, out var key))
         {
-            _buttons.Remove(key);
-            return;
+            if (!TryResolve(button, out key))
+            {
+                return;
+            }
+
+            _heldButtons[button] = key;
         }
 
         if (_buttons.Add(key))
@@ -512,8 +612,9 @@ public sealed class Input
         }
     }
 
-    /// <summary>Wheel notches: they zoom in sniper mode (<see cref="Wheel"/>) and press the wheel's
-    /// bindings until the next game step.</summary>
+    /// <summary>Wheel notches: while sniping they zoom (<see cref="ZoomWheel"/>) if the wheel still has
+    /// its zoom, or is bound to a zoom action; otherwise they press the wheel's bindings until the next
+    /// game step.</summary>
     internal void AddWheel(float notches)
     {
         Wheel += notches;
@@ -524,7 +625,20 @@ public sealed class Input
 
         var button = notches > 0f ? MouseButton.WheelUp : MouseButton.WheelDown;
         LastControl = ButtonName(button);
-        if (_buttonKeys.TryGetValue(button, out var key) && _wheel.Add(key))
+        if (Scoped)
+        {
+            var zoom = _scopeButtons.TryGetValue(button, out var scoped)
+                ? scoped
+                : _wheelZoom.Contains(button) ? (button == MouseButton.WheelUp ? Key.ZoomIn : Key.ZoomOut) : (Key?)null;
+            if (zoom is { } direction)
+            {
+                // A notch holds the zoom key for a while (Scope.Wheel): positive zooms in.
+                ZoomWheel += direction == Key.ZoomIn ? MathF.Abs(notches) : -MathF.Abs(notches);
+                return;
+            }
+        }
+
+        if (TryResolve(button, out var key) && _wheel.Add(key))
         {
             _pressed.Add(key);
         }
