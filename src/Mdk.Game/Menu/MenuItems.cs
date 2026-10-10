@@ -320,8 +320,8 @@ public sealed class MenuItems
                 continue;
             }
 
+            // Personal tweak: moving the highlight is silent; the sound plays on accept/click only.
             _selected = i;
-            Click();
             return;
         }
     }
@@ -425,11 +425,8 @@ public sealed class MenuItems
         }
 
         AddItem("Back", back);
-        if (_songVoice == 0)
-        {
-            _songVoice = _ui.Play(_song, Bus.Music);
-        }
-
+        // Personal tweak: the options' own song (OPTSONG) no longer plays on top of the main menu's
+        // or the level's music.
         Print();
     }
 

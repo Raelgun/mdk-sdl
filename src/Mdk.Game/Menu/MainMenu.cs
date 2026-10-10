@@ -319,12 +319,8 @@ public sealed class MainMenu : IScreen
     private void ShowOptions()
     {
         _page = Page.Other;
-        _ui.Audio.Stop(_songVoice);
-        _items.ShowOptions(() =>
-        {
-            _songVoice = _ui.Play(_song, Bus.Music);
-            ShowMain();
-        });
+        // Personal tweak: MAINSONG keeps playing through the options (no OPTSONG), so nothing to stop or restart.
+        _items.ShowOptions(ShowMain);
     }
 
     /// <summary>The 1996 demo's levels (godot-mdk docs/beta96.md), a page of the port's own.</summary>
