@@ -80,7 +80,7 @@ public sealed class HudView
     private readonly BomberOverlay _bomber;
 
     /// <summary>The HUD; <paramref name="mods"/>' images replace its own (<see cref="CanvasImages"/>).</summary>
-    public HudView(Renderer renderer, Bni sprites, Palette palette, Fti fti, ModImages? mods = null)
+    public HudView(Renderer renderer, Bni sprites, Palette palette, Fti fti, ModImages? mods = null, ModImages? wideMods = null)
     {
         _renderer = renderer;
         _palette = renderer.CreatePalette(palette.Rgba);
@@ -104,7 +104,7 @@ public sealed class HudView
         var big = new FontView(renderer, Font.Parse(fti.GetBytes(FontView.Big), FontSpace.Big), system, mods, FontView.Big);
         var small = new FontView(renderer, Font.Parse(fti.GetBytes(FontView.Small), FontSpace.Small), system, mods, FontView.Small);
         Messages = new Messages(fti, big, small);
-        Sniper = new SniperOverlay(renderer, sprites, palette, _palette, mods);
+        Sniper = new SniperOverlay(renderer, sprites, palette, _palette, mods, wideMods);
         _bomber = new BomberOverlay(renderer, sprites, _palette, big, palette, mods);
     }
 

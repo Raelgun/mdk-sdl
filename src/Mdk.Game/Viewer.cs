@@ -234,7 +234,8 @@ public sealed class Viewer : IScreen
         _scripts.GameFinished += () => _next = Event.GameFinished;
 
         // The HUD; pickups show their names (0x46c448).
-        _hud = new HudView(renderer, sprites, level.Dti.Palette, ui.Fti, mods);
+        // The original look has no mod images, but for the scope's wide frame: an opt-in extra that fits it to the palette.
+        _hud = new HudView(renderer, sprites, level.Dti.Palette, ui.Fti, mods, mods ?? ui.MenuImages);
         _scripts.Messages = _hud.Messages;
         CarryFromFall(state);
         RestoreSnapshot(state);

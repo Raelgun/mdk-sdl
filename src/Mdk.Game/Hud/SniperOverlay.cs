@@ -92,7 +92,7 @@ public sealed class SniperOverlay
     private readonly Palette _colours;
     private readonly ModImages? _mods;
     private readonly Image _frame;
-    /// <summary>A mod's wide frame (<see cref="WideImage"/>), or null; its size is in pixels.</summary>
+    /// <summary>A mod's wide frame (<see cref="WideImage"/>), or null; its size is the index texture's, in pixels.</summary>
     private readonly Image? _wide;
     private readonly Image _mask;
     private readonly Image _cross;
@@ -111,7 +111,7 @@ public sealed class SniperOverlay
     private bool _target;
 
     /// <summary>Sniper mode's screen; <paramref name="mods"/>' images replace its own (<see cref="CanvasImages"/>).</summary>
-    public SniperOverlay(Renderer renderer, Bni sprites, Palette palette, int paletteTexture, ModImages? mods = null)
+    public SniperOverlay(Renderer renderer, Bni sprites, Palette palette, int paletteTexture, ModImages? mods = null, ModImages? wideMods = null)
     {
         _renderer = renderer;
         _colours = palette;
@@ -119,7 +119,7 @@ public sealed class SniperOverlay
         _mods = mods;
         var mask = SniperScreen.Mask(sprites);
         _frame = Load(FrameImage, CutView(SniperScreen.Frame(sprites), mask), Vector2.Zero);
-        _wide = LoadWide();
+        _wide = LoadWide(wideMods ?? mods);
         _mask = Load(MaskImage, mask, Vector2.Zero);
         var cross = sprites.GetAnimation(Cross).GetFrame(0);
         _cross = Load(CanvasImages.FrameName(Cross, 0), cross.Image, new Vector2(cross.HotspotX, cross.HotspotY));
@@ -180,19 +180,22 @@ public sealed class SniperOverlay
     /// <summary>Whether sniper mode's screen replaces the HUD.</summary>
     public bool Visible => _shown != null;
 
-    /// <summary>A mod's <see cref="WideImage"/>: no original, so a one-pixel transparent index texture
-    /// (the original look draws nothing) that the mod's image replaces in the enhanced look.</summary>
-    private Image? LoadWide()
+    /// <summary>A mod's <see cref="WideImage"/> (it has no original), in both looks: the original look
+    /// draws an index texture, the image fitted to the screen's palette on its own pixel grid
+    /// (<see cref="PaletteFit"/>); the enhanced look replaces that with the full-colour image.
+    /// <paramref name="mods"/> are the mods' images even in the original look, which otherwise has none.</summary>
+    private Image? LoadWide(ModImages? mods)
     {
         var blank = new Texture { Name = WideImage, Width = 1, Height = 1, Indices = new byte[1] };
-        if (_mods?.Image(WideImage, blank, _colours) is not { } image || image.Height <= 0)
+        if (mods?.Image(WideImage, blank, _colours) is not { } image || image.Height <= 0)
         {
             return null;
         }
 
-        var id = _renderer.CreateIndexTexture(1, 1, blank.Indices);
+        var (width, height, indices) = PaletteFit.Fit(image, _colours, SniperScreen.ScreenHeight);
+        var id = _renderer.CreateIndexTexture(width, height, indices);
         _renderer.ReplaceImage(id, _palette, image.Width, image.Height, image.Rgba);
-        return new Image(id, new Vector2(image.Width, image.Height), Vector2.Zero);
+        return new Image(id, new Vector2(width, height), Vector2.Zero);
     }
 
     /// <summary>Where the wide frame's strips go on a canvas of <paramref name="canvasWidth"/> when the
@@ -354,8 +357,8 @@ public sealed class SniperOverlay
 
         foreach (var (from, to, u0, u1) in WideStrips(canvasWidth, left, wide.Size.X / wide.Size.Y))
         {
-            // Normalised source: the stand-in texture is one pixel, the mod's image has its own size.
-            _renderer.DrawImage(wide.Texture, _palette, Vector2.One, new RectangleF(u0, 0f, u1 - u0, 1f),
+            // In the index texture's pixels (the enhanced look's image is sampled by the same 0 to 1).
+            _renderer.DrawImage(wide.Texture, _palette, wide.Size, new RectangleF(u0 * wide.Size.X, 0f, (u1 - u0) * wide.Size.X, wide.Size.Y),
                 new RectangleF(from, 0f, to - from, Renderer.CanvasHeight), Vector4.One);
         }
     }

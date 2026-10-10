@@ -108,7 +108,10 @@ the middle between black bars. A mod can continue it to the sides with `images/S
   gauges stay the game's own (or a mod's `SNIPERS1`), so the middle of this image doesn't matter.
 - A narrower window crops the image evenly on both sides; a window wider than the image keeps black
   beyond it. Make it for the widest ratio you want to cover.
-- Enhanced look only, like all mods.
+- Both looks. The enhanced look draws the image as it is. The original look (which has no mod
+  images otherwise) draws it fitted to the scope's own 256 colours, dithered, on the screen's pixel
+  grid (480 rows), so a wide frame keeps the original look's palette. Put it in the mod's top
+  `images` folder (not a level's).
 
 ### Example: replace a floor texture (LEVEL3's start)
 
