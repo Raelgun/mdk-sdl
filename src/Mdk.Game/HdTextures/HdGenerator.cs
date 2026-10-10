@@ -185,7 +185,7 @@ public static class HdGenerator
 
     /// <summary>The mod's <c>mod.txt</c>: the upscaler's model and scale.</summary>
     private static ModInfo Info(string model, int scale) =>
-        new(ModFolder, "HD textures (Real-ESRGAN)", "made on this computer", "", $"{model}, {scale}x", ModPriority);
+        new(ModFolder, "HD textures", "made on this computer", "", $"{model}, {scale}x", ModPriority);
 
     /// <summary>Moves older builds' <c>textures-hd/</c> into the mod (once; its images keep their
     /// keys). Returns how many images moved.</summary>

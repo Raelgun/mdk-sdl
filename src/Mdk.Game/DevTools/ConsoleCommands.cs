@@ -232,7 +232,7 @@ public static class ConsoleCommands
     /// <summary>The mods found (on or off), then what the level took from them.
     /// <code>
     ///   Clean walls (clean-walls) on, priority 0
-    ///   HD textures (Real-ESRGAN) (hd-textures) off, priority -100
+    ///   HD textures (hd-textures) off, priority -100
     ///   mods 1: 14 images, 1 models
     ///   images: WALL1 WALL2 ...
     /// </code></summary>

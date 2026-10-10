@@ -306,7 +306,7 @@ The enhanced look can draw the textures upscaled 2x by an AI upscaler, made once
 from your copy of the game: Options, Mods, "Make HD textures" (a progress page; leaving it cancels), or
 `mdk --upscale-textures` (all levels; `=3,7` only those; `--hd-model=general|anime`,
 `--hd-scale=2|4`). They are a mod, `mods/hd-textures/` ([docs/modding.md](docs/modding.md)):
-Options, Mods, "HD textures (Real-ESRGAN)" switches them, from the next level on (enhanced look
+Options, Mods, "HD textures" switches them, from the next level on (enhanced look
 only; the original look is unchanged). Other mods override them.
 
 - Downloaded once into `tools/realesrgan/` next to the program: the portable

@@ -80,7 +80,7 @@ public sealed class MainMenu : IScreen
         _items = new MenuItems(ui, _fonts);
         _video = new VideoPlayer(ui);
         _slideshow = new Slideshow(ui, _video);
-        _video.Finished += _slideshow.Start;
+        // Personal tweak: the slideshow is never started, so the menu stays on the video's last frame.
         var options = Bni.Load(ui.Data.PathOf(Archive));
 
         // MDKOPT: a 768-byte palette, then a 600 x 360 image.
