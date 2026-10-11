@@ -31,10 +31,11 @@ public sealed class KurtSprite
     /// <summary>The chain gun's muzzle flash, drawn behind Kurt (a little farther from the camera).</summary>
     private const string MuzzleFlash = "K_MUZZF";
     private const float MuzzleBehind = 0.05f;
-    /// <summary>The frame is a flat card at the feet's depth, but the shadow painted below his feet lies
-    /// on a floor nearer to the camera, so the floor hid it (the original draws without depth). The card
-    /// is brought this many sprite pixels nearer (scaled about the eye, so it looks the same size and
-    /// place), enough for the floor in front of him not to cover the shadow.</summary>
+    /// <summary>The frame is a flat card at the feet's depth, so the floor in front of his feet (nearer to
+    /// the camera) would hide whatever is painted below the feet line, the shadow (the original draws
+    /// without depth). Two things: the card is brought this many sprite pixels nearer (scaled about the
+    /// eye, so it looks the same size and place), and the rows below the feet line are drawn over the
+    /// scene without depth (<see cref="Pass.OnTop"/>), whatever the camera's angle to the floor.</summary>
     private const float ShadowPullPixels = 30f;
 
     private static readonly Dictionary<Kurt.State, (string Name, Repeat Repeat)> Animations = new()
@@ -88,6 +89,8 @@ public sealed class KurtSprite
     private readonly Palette _colours;
     private readonly ModImages? _mods;
     private readonly int _mesh;
+    /// <summary>The frame's rows below the feet line (the shadow).</summary>
+    private readonly int _groundMesh;
     private readonly int _muzzleMesh;
     private readonly Dictionary<(string, int), int> _textures = [];
     /// <summary>Frames from the level's archives (the board's K_SURF and K_SURFJ).</summary>
@@ -102,6 +105,7 @@ public sealed class KurtSprite
         _mods = mods;
         _palette = renderer.CreatePalette(palette.Rgba);
         _mesh = renderer.CreateDynamicMesh(QuadVertices);
+        _groundMesh = renderer.CreateDynamicMesh(QuadVertices);
         _muzzleMesh = renderer.CreateDynamicMesh(QuadVertices);
         foreach (var name in Animations.Values.Select(a => a.Name).Append(ChuteSway).Append(MuzzleFlash).Append(BackUp).Distinct())
         {
@@ -178,7 +182,7 @@ public sealed class KurtSprite
         // Nearer to the eye along the view ray: same place and size on screen, the shadow in front of the floor.
         var scale = MathF.Max(1f - ShadowPullPixels * pixel / depth, 0.5f);
         var quad = new Quad(eye + (kurt.Feet - eye) * scale, right * (pixel * scale * flip), up * (pixel * scale));
-        DrawFrame(_mesh, name, frame, quad, 0, 0);
+        DrawFrame(_mesh, name, frame, quad, 0, 0, _groundMesh);
 
         // The flash's hotspot is at Kurt's hotspot plus its offset.
         if (kurt.Muzzle is { } muzzle)
@@ -191,23 +195,43 @@ public sealed class KurtSprite
     /// <summary>Where a frame goes: the feet, and the world vectors of one sprite pixel right and up.</summary>
     private readonly record struct Quad(Vector3 Feet, Vector3 Right, Vector3 Up);
 
-    /// <summary>Draws a frame with its hotspot 101 pixels above the feet, moved by (dx, dy) pixels (y down).</summary>
-    private void DrawFrame(int mesh, string name, int frame, Quad at, int dx, int dy)
+    /// <summary>Draws a frame with its hotspot 101 pixels above the feet, moved by (dx, dy) pixels (y down).
+    /// With <paramref name="groundMesh"/>, the rows below the feet line (the shadow) are a second quad
+    /// drawn without depth, so the floor never covers them.</summary>
+    private void DrawFrame(int mesh, string name, int frame, Quad at, int dx, int dy, int groundMesh = -1)
     {
         var image = Animation(name).GetFrame(frame);
         var w = image.Image.Width;
         var h = image.Image.Height;
         var ax = image.HotspotX - dx;
         var ay = image.HotspotY + FeetOffset - dy;
+        var material = MaterialOf(name, frame, image.Image);
 
+        // Rows [0, feet) with depth; [feet, h) without, when asked.
+        var feet = groundMesh >= 0 ? Math.Clamp(ay, 0, h) : h;
+        if (feet > 0)
+        {
+            DrawRows(mesh, material, at, ax, ay, w, h, 0, feet);
+        }
+
+        if (feet < h)
+        {
+            DrawRows(groundMesh, material with { Pass = Pass.OnTop }, at, ax, ay, w, h, feet, h);
+        }
+    }
+
+    /// <summary>The frame's rows from <paramref name="top"/> to <paramref name="bottom"/> as a quad.</summary>
+    private void DrawRows(int mesh, Material material, Quad at, int ax, int ay, int w, int h, int top, int bottom)
+    {
         Vector3 Corner(float px, float py) => at.Feet + at.Right * (px - ax) + at.Up * (ay - py);
+        float v0 = (float)top / h, v1 = (float)bottom / h;
         Span<Vertex> quad =
         [
-            new(Corner(0, 0), new Vector2(0, 0)), new(Corner(w, 0), new Vector2(1, 0)), new(Corner(w, h), new Vector2(1, 1)),
-            new(Corner(0, 0), new Vector2(0, 0)), new(Corner(w, h), new Vector2(1, 1)), new(Corner(0, h), new Vector2(0, 1)),
+            new(Corner(0, top), new Vector2(0, v0)), new(Corner(w, top), new Vector2(1, v0)), new(Corner(w, bottom), new Vector2(1, v1)),
+            new(Corner(0, top), new Vector2(0, v0)), new(Corner(w, bottom), new Vector2(1, v1)), new(Corner(0, bottom), new Vector2(0, v1)),
         ];
         _renderer.UpdateMesh(mesh, quad);
-        _renderer.Draw(mesh, 0, QuadVertices, MaterialOf(name, frame, image.Image));
+        _renderer.Draw(mesh, 0, QuadVertices, material);
     }
 
     /// <summary>The animation and frame of Kurt's state; the chute opens, then sways.</summary>
