@@ -74,6 +74,11 @@ public sealed class FollowCamera(ArenaSpace? space = null)
     private float _shake;
     private float _shakeTime;
     private readonly Random _random = new();
+    // Diagnostic (temporary): one CSV line per update in camlog.csv next to mdk.exe.
+    private StreamWriter? _log;
+    private float _logTime;
+    private float _logPush;
+    private float _logClip;
 
     public Vector3 Position { get; private set; }
     public Vector3 Forward { get; private set; } = Vector3.UnitY;
@@ -132,7 +137,31 @@ public sealed class FollowCamera(ArenaSpace? space = null)
         Up = Vector3.Normalize(Vector3.Cross(Vector3.Cross(Forward, Vector3.UnitZ), Forward));
         Right = Vector3.Normalize(Vector3.Cross(Forward, Vector3.UnitZ));
         UpdateShake(delta);
+        WriteLog(kurt, delta);
         Turn(ShakeOffset * float.DegreesToRadians(FieldOfView) / ViewHeight, float.DegreesToRadians(kurt.CameraRoll.Roll));
+    }
+
+    private void WriteLog(Kurt kurt, float delta)
+    {
+        try
+        {
+            if (_log == null)
+            {
+                _log = new StreamWriter(Path.Combine(AppContext.BaseDirectory, "camlog.csv")) { AutoFlush = true };
+                _log.WriteLine("t,feetX,feetY,feetZ,camX,camY,camZ,arenaPitch,look,air,climb,pushLen,clipLen,delta");
+            }
+
+            _logTime += delta;
+            var c = System.Globalization.CultureInfo.InvariantCulture;
+            _log.WriteLine(string.Join(',', new[]
+            {
+                _logTime, kurt.Feet.X, kurt.Feet.Y, kurt.Feet.Z, Position.X, Position.Y, Position.Z,
+                _arenaPitch, _lookOffset, _airPitch, _climb, _logPush, _logClip, delta,
+            }.Select(v => v.ToString("0.####", c))));
+        }
+        catch
+        {
+        }
     }
 
     /// <summary>Turns the view by the shake (radians across and up), then rolls it: a positive roll
@@ -193,6 +222,8 @@ public sealed class FollowCamera(ArenaSpace? space = null)
     /// the way push him by what they cut off. The camera moves as far as Kurt did.</summary>
     private Vector3 Clear(Kurt kurt, ArenaSpace arenas, Vector3 camera, float delta)
     {
+        _logPush = 0f;
+        _logClip = 0f;
         var head = kurt.Feet + Vector3.UnitZ * HeadHeight;
         if (arenas.Sight(head, camera, SightBox) is var (point, plane))
         {
@@ -206,6 +237,7 @@ public sealed class FollowCamera(ArenaSpace? space = null)
             if (Push(kurt, arenas, normal * d, new Vector2(normal.Y, -normal.X) * (d * PushSide)) is { } push)
             {
                 // Personal tweak: ease the push in; what's left is pushed on the next steps.
+                _logPush = push.Length();
                 var limit = MaxPushSpeed * delta;
                 if (push.Length() > limit)
                 {
@@ -222,6 +254,7 @@ public sealed class FollowCamera(ArenaSpace? space = null)
         }
 
         var end = ClipView(kurt.Feet + Vector3.UnitZ * HeadHeight, camera);
+        _logClip = (end - camera).Length();
         return camera + kurt.Shove(end - camera);
     }
 
