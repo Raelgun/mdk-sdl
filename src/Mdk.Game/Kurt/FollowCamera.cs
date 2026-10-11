@@ -254,8 +254,17 @@ public sealed class FollowCamera(ArenaSpace? space = null)
         }
 
         var end = ClipView(kurt.Feet + Vector3.UnitZ * HeadHeight, camera);
-        _logClip = (end - camera).Length();
-        return camera + kurt.Shove(end - camera);
+        var offset = end - camera;
+        _logClip = offset.Length();
+        // Personal tweak: a solid object (a door) behind Kurt shoves him on by up to ~8 units in one
+        // step; ease that in as well.
+        var clipLimit = MaxPushSpeed * delta;
+        if (offset.Length() > clipLimit)
+        {
+            offset = Vector3.Normalize(offset) * clipLimit;
+        }
+
+        return camera + kurt.Shove(offset);
     }
 
     /// <summary>The push, or a push to a side, with a floor under it (in the air: the push), or null.</summary>
