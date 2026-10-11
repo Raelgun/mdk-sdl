@@ -37,6 +37,9 @@ public sealed class KurtSprite
     /// eye, so it looks the same size and place), and the rows below the feet line are drawn over the
     /// scene without depth (<see cref="Pass.OnTop"/>), whatever the camera's angle to the floor.</summary>
     private const float ShadowPullPixels = 30f;
+    /// <summary>The no-depth part starts this many sprite rows above the feet line: on a steep floor the
+    /// floor also covers the last rows above the line, leaving a gap between the legs and the shadow.</summary>
+    private const int GroundRowsAbove = 12;
 
     private static readonly Dictionary<Kurt.State, (string Name, Repeat Repeat)> Animations = new()
     {
@@ -208,7 +211,7 @@ public sealed class KurtSprite
         var material = MaterialOf(name, frame, image.Image);
 
         // Rows [0, feet) with depth; [feet, h) without, when asked.
-        var feet = groundMesh >= 0 ? Math.Clamp(ay, 0, h) : h;
+        var feet = groundMesh >= 0 ? Math.Clamp(ay - GroundRowsAbove, 0, h) : h;
         if (feet > 0)
         {
             DrawRows(mesh, material, at, ax, ay, w, h, 0, feet);
