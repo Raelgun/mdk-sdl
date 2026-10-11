@@ -70,6 +70,10 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
     /// <summary>The glue's fastest drop (u/s), under the hard landing's: the landing that follows it
     /// must not hurt.</summary>
     private const float GlueMaxSpeed = 90f;
+    /// <summary>Running, or standing, Kurt starts the fall animation only after this long (seconds) off
+    /// the floor: down a steep slope his feet leave it for a step or two at a time, and the animation
+    /// flipped between the run and the fall.</summary>
+    private const float FallGrace = 0.15f;
     /// <summary>Falling onto a platform first goes to 0.05 above its top (damp_gravity).</summary>
     private const float PlatformLift = 0.05f;
     /// <summary>Objects this far around a move (and Kurt's height above it) may stop it.</summary>
@@ -589,9 +593,13 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
         }
     }
 
+    /// <summary>How long Kurt has been off the floor (seconds).</summary>
+    private float _airFor;
+
     private void UpdateState(float forward, float strafe, float delta)
     {
         StateTime += delta;
+        _airFor = OnFloor ? 0f : _airFor + delta;
         if (UpdateCombatState(delta))
         {
             return;
@@ -615,7 +623,8 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
             {
                 SetState(MathF.Abs(ForwardSpeed) > MovingSpeed ? State.RunJump : State.Jump);
             }
-            else if (VerticalSpeed < FallStartSpeed && (Current is not (State.Jump or State.RunJump) || done))
+            else if (VerticalSpeed < FallStartSpeed && (Current is not (State.Jump or State.RunJump) || done)
+                && (_airFor >= FallGrace || Current is State.Jump or State.RunJump or State.Fall))
             {
                 SetState(State.Fall);
             }
