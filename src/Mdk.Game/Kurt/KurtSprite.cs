@@ -31,6 +31,11 @@ public sealed class KurtSprite
     /// <summary>The chain gun's muzzle flash, drawn behind Kurt (a little farther from the camera).</summary>
     private const string MuzzleFlash = "K_MUZZF";
     private const float MuzzleBehind = 0.05f;
+    /// <summary>The frame is a flat card at the feet's depth, but the shadow painted below his feet lies
+    /// on a floor nearer to the camera, so the floor hid it (the original draws without depth). The card
+    /// is brought this many sprite pixels nearer (scaled about the eye, so it looks the same size and
+    /// place), enough for the floor in front of him not to cover the shadow.</summary>
+    private const float ShadowPullPixels = 30f;
 
     private static readonly Dictionary<Kurt.State, (string Name, Repeat Repeat)> Animations = new()
     {
@@ -170,13 +175,15 @@ public sealed class KurtSprite
         // K_ROLLL and K_ROLLR are the same file, a roll to the right: mirrored for the left.
         var flip = (kurt.Current == Kurt.State.Side && kurt.StrafeSpeed < 0f) || kurt.Current == Kurt.State.RollLeft ? -1f : 1f;
         var (name, frame) = Pick(kurt);
-        var quad = new Quad(kurt.Feet, right * (pixel * flip), up * pixel);
+        // Nearer to the eye along the view ray: same place and size on screen, the shadow in front of the floor.
+        var scale = MathF.Max(1f - ShadowPullPixels * pixel / depth, 0.5f);
+        var quad = new Quad(eye + (kurt.Feet - eye) * scale, right * (pixel * scale * flip), up * (pixel * scale));
         DrawFrame(_mesh, name, frame, quad, 0, 0);
 
         // The flash's hotspot is at Kurt's hotspot plus its offset.
         if (kurt.Muzzle is { } muzzle)
         {
-            var behind = quad with { Feet = kurt.Feet + forward * MuzzleBehind };
+            var behind = quad with { Feet = quad.Feet + forward * MuzzleBehind };
             DrawFrame(_muzzleMesh, MuzzleFlash, muzzle.Frame, behind, muzzle.X, muzzle.Y);
         }
     }
