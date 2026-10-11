@@ -52,6 +52,10 @@ public sealed class FollowCamera(ArenaSpace? space = null)
     private static readonly Vector3 SightBox = new(0.1f);
     private const float PushFloorRange = 4f;
     private const float PushSide = 0.5f;
+    /// <summary>Personal tweak: the wall push moves Kurt at most this fast (u/s) instead of all at
+    /// once, so running through a door doesn't "fast-forward" him. Set to float.MaxValue for the
+    /// original behaviour.</summary>
+    private const float MaxPushSpeed = 40f;
     /// <summary>Screen shake: each tick above 1 the view turns by up to ±1.64 × the shake in pixels of
     /// the 360-high view (at most ±19 across, ±59 up and down); it drains by 0.25 per tick.</summary>
     private const float ShakeScale = 16384f * 0.0001f;
@@ -121,7 +125,7 @@ public sealed class FollowCamera(ArenaSpace? space = null)
         Position = Point(kurt.Feet, facing, pitch, kurt.CameraPivot);
         if (space != null && !kurt.Sniping && !kurt.Frozen && kurt.Current != Kurt.State.Dead)
         {
-            Position = Clear(kurt, space, Position);
+            Position = Clear(kurt, space, Position, delta);
         }
 
         Forward = Vector3.Normalize(facing * MathF.Cos(pitch) - Vector3.UnitZ * MathF.Sin(pitch));
@@ -187,7 +191,7 @@ public sealed class FollowCamera(ArenaSpace? space = null)
     /// camera pushes Kurt d · n away from it (d: how far the camera is past it, n: its horizontal
     /// normal towards him) if there's floor there (or half of d to a side); then the solid objects in
     /// the way push him by what they cut off. The camera moves as far as Kurt did.</summary>
-    private Vector3 Clear(Kurt kurt, ArenaSpace arenas, Vector3 camera)
+    private Vector3 Clear(Kurt kurt, ArenaSpace arenas, Vector3 camera, float delta)
     {
         var head = kurt.Feet + Vector3.UnitZ * HeadHeight;
         if (arenas.Sight(head, camera, SightBox) is var (point, plane))
@@ -201,6 +205,13 @@ public sealed class FollowCamera(ArenaSpace? space = null)
             var d = Vector2.Distance(new Vector2(camera.X, camera.Y), new Vector2(point.X, point.Y));
             if (Push(kurt, arenas, normal * d, new Vector2(normal.Y, -normal.X) * (d * PushSide)) is { } push)
             {
+                // Personal tweak: ease the push in; what's left is pushed on the next steps.
+                var limit = MaxPushSpeed * delta;
+                if (push.Length() > limit)
+                {
+                    push = Vector2.Normalize(push) * limit;
+                }
+
                 camera += kurt.Shove(new Vector3(push, 0f));
             }
         }
@@ -211,7 +222,16 @@ public sealed class FollowCamera(ArenaSpace? space = null)
         }
 
         var end = ClipView(kurt.Feet + Vector3.UnitZ * HeadHeight, camera);
-        return camera + kurt.Shove(end - camera);
+        var offset = end - camera;
+        // Personal tweak: a solid object (a door) behind Kurt shoves him on by up to ~8 units in one
+        // step; ease that in as well.
+        var clipLimit = MaxPushSpeed * delta;
+        if (offset.Length() > clipLimit)
+        {
+            offset = Vector3.Normalize(offset) * clipLimit;
+        }
+
+        return camera + kurt.Shove(offset);
     }
 
     /// <summary>The push, or a push to a side, with a floor under it (in the air: the push), or null.</summary>
