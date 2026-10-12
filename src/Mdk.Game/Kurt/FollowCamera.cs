@@ -74,15 +74,6 @@ public sealed class FollowCamera(ArenaSpace? space = null)
     private float _shake;
     private float _shakeTime;
     private readonly Random _random = new();
-    // Personal tweak: the previous tick's camera, to blend with in View.
-    private const float BlendSnapDistance = 50f;
-    private const float BlendSnapDot = 0.98f;
-    private Vector3 _prevForward = Vector3.UnitY;
-    private Vector3 _prevUp = Vector3.UnitZ;
-    private Vector3 _prevOffset;
-    private Vector3 _curOffset;
-    private Vector3 _feet;
-    private bool _blendReady;
 
     public Vector3 Position { get; private set; }
     public Vector3 Forward { get; private set; } = Vector3.UnitY;
@@ -98,17 +89,6 @@ public sealed class FollowCamera(ArenaSpace? space = null)
     public void RaiseShake(float amount) => _shake = MathF.Max(_shake, amount);
 
     public void Update(Kurt kurt, float arenaPitch, Input input, float delta)
-    {
-        _prevForward = Forward;
-        _prevUp = Up;
-        _prevOffset = _curOffset;
-        Tick(kurt, arenaPitch, input, delta);
-        _feet = kurt.Feet;
-        _curOffset = Position - kurt.Feet;
-        _blendReady = true;
-    }
-
-    private void Tick(Kurt kurt, float arenaPitch, Input input, float delta)
     {
         if (kurt.TopDownHeight is { } height)
         {
@@ -356,24 +336,7 @@ public sealed class FollowCamera(ArenaSpace? space = null)
         return feet + facing * back + Vector3.UnitZ * (pivot + distance * MathF.Sin(pitch));
     }
 
-    /// <summary>The view for drawing. The game's logic runs 60 times a second, so on a faster screen
-    /// the camera would only move every second or third frame (a visible judder when turning, most
-    /// of all in the sky). <paramref name="blend"/> (0 to 1, how far the frame is into the next
-    /// tick) mixes the previous tick's direction and offset from Kurt with this tick's. Kurt's own
-    /// place is not mixed, so he stays pinned on screen. Personal tweak.</summary>
-    public View View(float aspect, float blend = 1f)
-    {
-        var jump = (_curOffset - _prevOffset).Length() > BlendSnapDistance || Vector3.Dot(_prevForward, Forward) < BlendSnapDot;
-        if (blend >= 1f || !_blendReady || jump)
-        {
-            return CameraMath.View(Position, Forward, Up, FieldOfView, aspect, Near, Far);
-        }
-
-        var forward = Vector3.Normalize(Vector3.Lerp(_prevForward, Forward, blend));
-        var up = Vector3.Normalize(Vector3.Lerp(_prevUp, Up, blend));
-        var position = _feet + Vector3.Lerp(_prevOffset, _curOffset, blend);
-        return CameraMath.View(position, forward, up, FieldOfView, aspect, Near, Far);
-    }
+    public View View(float aspect) => CameraMath.View(Position, Forward, Up, FieldOfView, aspect, Near, Far);
 
     /// <summary>Sniper mode: the view from Kurt's eye through the scope.</summary>
     public static View SniperView(Kurt kurt, float aspect) =>

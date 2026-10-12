@@ -1022,7 +1022,14 @@ public sealed unsafe partial class Renderer : IDisposable
     private void DrawSky(SDL_GPUCommandBuffer* commands, SDL_GPURenderPass* pass, View view, Panorama panorama)
     {
         SDL_BindGPUGraphicsPipeline(pass, Pipeline(new PipelineKey("sky", Pass.DoubleSided, Primitive.Triangles, Geometry.Screen, _passSamples, Output.Colour)));
+        // Personal tweak: the sky's directions come from the same matrix the level is drawn with
+        // (a point on the far plane, seen from the eye), not from a second one built on the side.
         var clipToDirection = view.ClipToDirection;
+        if (Matrix4x4.Invert(view.ViewProjection, out var inverse))
+        {
+            clipToDirection = inverse * Matrix4x4.CreateTranslation(-view.Position);
+        }
+
         SDL_PushGPUVertexUniformData(commands, 0, (IntPtr)(&clipToDirection), (uint)sizeof(Matrix4x4));
         BindPanorama(commands, pass, panorama, panorama.Sky, 0f, view.Position);
         DrawPrimitives(pass, ScreenTriangle, 0, Primitive.Triangles);

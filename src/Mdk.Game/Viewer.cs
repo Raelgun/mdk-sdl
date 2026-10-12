@@ -661,7 +661,7 @@ public sealed class Viewer : IScreen
             return FollowCamera.SniperView(_kurt, aspect);
         }
 
-        return CutsceneCamera.Active(_scripts) ? _cutscene.View(aspect) : _follow.View(aspect, _test ? 1f : MathF.Min(_pending / Step, 1f));
+        return CutsceneCamera.Active(_scripts) ? _cutscene.View(aspect) : _follow.View(aspect);
     }
 
     /// <summary>The camera's axes and field of view outside sniper mode: flying, a cutscene's or Kurt's.</summary>
