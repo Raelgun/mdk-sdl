@@ -48,20 +48,21 @@ float3 sky_pixel(int column, int row)
     return palette_texture.Load(int3(index, 0, 0)).rgb;
 }
 
-// TEMPORARY TEST: draws a grid of thin lines every 5 degrees instead of the sky (white: azimuth,
-// yellow: elevation, brighter every 45 degrees), to measure how the sky moves as the camera turns.
 float4 ps_main(VertexOut input) : SV_Target
 {
-    float3 d = normalize(input.direction);
-    float2 angle = float2(degrees(atan2(d.x, d.y)), degrees(asin(clamp(d.z, -1.0, 1.0))));
-    float2 width = max(fwidth(angle), 1e-4);
-    float2 cell = angle / 5.0;
-    float2 gap = abs(frac(cell + 0.5) - 0.5) * 5.0;
-    float2 stripe = saturate(1.0 - (gap - 0.05) / width);
-    float2 big = abs(frac(angle / 45.0 + 0.5) - 0.5) * 45.0;
-    float2 bigStripe = saturate(1.0 - (big - 0.05) / width);
-    float3 colour = float3(0.04, 0.07, 0.2);
-    colour = lerp(colour, float3(1.0, 1.0, 1.0), stripe.x * 0.8 + bigStripe.x * 0.2);
-    colour = lerp(colour, float3(1.0, 0.9, 0.2), stripe.y * 0.8 + bigStripe.y * 0.2);
-    return float4(colour, 1.0);
+    float3 direction = normalize(input.direction);
+
+    // The enhanced look blends the 4 nearest pixels, each through the palette.
+    if (sampling == SAMPLING_LINEAR)
+    {
+        float2 position = panorama_position(direction) - 0.5;
+        int2 cell = int2(floor(position));
+        float2 f = frac(position);
+        float3 top = lerp(sky_pixel(cell.x, cell.y), sky_pixel(cell.x + 1, cell.y), f.x);
+        float3 bottom = lerp(sky_pixel(cell.x, cell.y + 1), sky_pixel(cell.x + 1, cell.y + 1), f.x);
+        return float4(lerp(top, bottom, f.y), 1.0);
+    }
+
+    float2 pixel = panorama_pixel(direction);
+    return float4(sky_pixel(int(pixel.x), int(pixel.y)), 1.0);
 }

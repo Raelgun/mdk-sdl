@@ -336,7 +336,18 @@ public sealed class FollowCamera(ArenaSpace? space = null)
         return feet + facing * back + Vector3.UnitZ * (pivot + distance * MathF.Sin(pitch));
     }
 
-    public View View(float aspect) => CameraMath.View(Position, Forward, Up, FieldOfView, aspect, Near, Far);
+    private static System.IO.StreamWriter? _diag;
+    private static readonly System.Diagnostics.Stopwatch DiagClock = System.Diagnostics.Stopwatch.StartNew();
+
+    public View View(float aspect)
+    {
+        // DIAGNOSTIC (temporary): one line per frame with the camera's exact direction.
+        _diag ??= new System.IO.StreamWriter("camlog2.csv") { AutoFlush = false };
+        _diag.WriteLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"{DiagClock.Elapsed.TotalMilliseconds:F3},{MathF.Atan2(Forward.X, Forward.Y):F6},{MathF.Asin(Forward.Z):F6},{Up.Z:F6},{Position.X:F3},{Position.Y:F3},{Position.Z:F3}"));
+        if (DiagClock.ElapsedMilliseconds % 1000 < 20) { _diag.Flush(); }
+        return CameraMath.View(Position, Forward, Up, FieldOfView, aspect, Near, Far);
+    }
 
     /// <summary>Sniper mode: the view from Kurt's eye through the scope.</summary>
     public static View SniperView(Kurt kurt, float aspect) =>
