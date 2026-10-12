@@ -1022,12 +1022,23 @@ public sealed unsafe partial class Renderer : IDisposable
     private void DrawSky(SDL_GPUCommandBuffer* commands, SDL_GPURenderPass* pass, View view, Panorama panorama)
     {
         SDL_BindGPUGraphicsPipeline(pass, Pipeline(new PipelineKey("sky", Pass.DoubleSided, Primitive.Triangles, Geometry.Screen, _passSamples, Output.Colour)));
-        // Personal tweak: the sky's directions come from the same matrix the level is drawn with
-        // (a point on the far plane, seen from the eye), not from a second one built on the side.
+        // Personal tweak (test): the sky's directions are built straight from the camera's axes and
+        // field of view, with no matrix inverted: (x, y, 1, 1) -> forward + right * x' + up * y'.
         var clipToDirection = view.ClipToDirection;
-        if (Matrix4x4.Invert(view.ViewProjection, out var inverse))
+        if (view.Camera is { } camera && _eyeSide == 0f)
         {
-            clipToDirection = inverse * Matrix4x4.CreateTranslation(-view.Position);
+            var forward = Vector3.Normalize(camera.Forward);
+            var right = Vector3.Normalize(Vector3.Cross(forward, camera.Up));
+            var up = Vector3.Cross(right, forward);
+            var projection = camera.Projection;
+            var across = right / projection.M11;
+            var upwards = up / projection.M22;
+            var centre = forward + right * (projection.M31 / projection.M11) + up * (projection.M32 / projection.M22);
+            clipToDirection = new Matrix4x4(
+                across.X, across.Y, across.Z, 0f,
+                upwards.X, upwards.Y, upwards.Z, 0f,
+                centre.X, centre.Y, centre.Z, 0f,
+                0f, 0f, 0f, 1f);
         }
 
         SDL_PushGPUVertexUniformData(commands, 0, (IntPtr)(&clipToDirection), (uint)sizeof(Matrix4x4));
