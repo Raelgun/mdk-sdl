@@ -40,6 +40,22 @@ public class KurtSpriteTests
     }
 
     [Fact]
+    public void BodyStaysInFrontOfACrest()
+    {
+        // Kurt has stepped off a flat top onto a slope, 0.3 below the top's plane: the ray to his
+        // ankles (0.1 above the feet) meets the top's edge first.
+        const float top = 0.3f;
+        var ankles = Feet + SpriteUp * 0.1f;
+        var direction = ankles - Eye;
+        var t = (Feet.Z + top - Eye.Z) / direction.Z;
+        Assert.InRange(t, 0f, 1f);
+
+        var moved = Eye + direction * KurtSprite.InFront(Depth, Vector3.Dot(direction * t, Forward));
+
+        Assert.True(moved.Z > Feet.Z + top, $"{Feet.Z + top - moved.Z} under the top");
+    }
+
+    [Fact]
     public void CloseUpStaysInFront() => Assert.InRange(KurtSprite.Nearer(1f, null), 0.1f, 1f);
 
     private static Vector3 Forward => Vector3.Normalize(Feet - Eye);
