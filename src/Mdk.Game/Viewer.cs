@@ -31,6 +31,8 @@ public sealed record ViewerOptions(int Level, Vector3? Position, float? Yaw, flo
     public float Wait { get; init; }
     /// <summary>Hold "forward" this many seconds from the start.</summary>
     public float Walk { get; init; }
+    /// <summary>The follow camera's look down (degrees; negative: up), as the mouse's.</summary>
+    public float Look { get; init; }
     /// <summary>Seconds before the held keys start (like the Godot port's --delay).</summary>
     public float Delay { get; init; }
     public bool Jump { get; init; }
@@ -227,7 +229,7 @@ public sealed class Viewer : IScreen
             Option = ui.Settings.Gore ? 1 : 0,
         };
         _scripts.AirStrike.UsedUp = state.StrikeUsed;
-        _follow = new FollowCamera(_space) { ClipView = _scripts.ClipView };
+        _follow = new FollowCamera(_space) { ClipView = _scripts.ClipView, Look = options.Look };
         _scripts.ShakeRaised += _follow.RaiseShake;
         _kurt.Died += OnDied;
         _scripts.LevelEnded += over => _ending = over == ScriptRuntime.GameOver.Yes ? (Event.GameOver, GameOverDelay) : (Event.LevelEnded, EndDelay);
@@ -647,7 +649,7 @@ public sealed class Viewer : IScreen
         _ropes.Draw(_scripts.Objects);
         _sniper.Draw(_kurt, _scripts, elapsed);
         _effects.Draw(_scripts, camera);
-        _sprite.Draw(_kurt, camera.Position, eye.Forward, eye.Up, eye.FieldOfView);
+        _sprite.Draw(_kurt, camera.Position, eye.Forward, eye.Up, eye.FieldOfView, _space);
 
         _hud.Messages.Update(elapsed);
         _hud.Draw(HudStateOf(_kurt, _scripts, _hudSlots));

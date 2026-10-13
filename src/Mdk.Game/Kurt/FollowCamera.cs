@@ -82,6 +82,8 @@ public sealed class FollowCamera(ArenaSpace? space = null)
     /// <summary>The solid objects of Kurt's arena that block the view (flag 0x1000000): where the line
     /// of sight first meets one of their parts, or its end.</summary>
     public Func<Vector3, Vector3, Vector3>? ClipView;
+    /// <summary>The mouse's look to start with (degrees, positive down; --look).</summary>
+    public float Look { init => _lookOffset = value; }
     /// <summary>The shake's offset this tick (pixels of the 360-high view).</summary>
     public Vector2 ShakeOffset { get; private set; }
 

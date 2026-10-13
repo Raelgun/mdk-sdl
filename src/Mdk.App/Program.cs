@@ -186,6 +186,7 @@ var viewer = new ViewerOptions(level, position, yaw, pitch, sound)
     Screenshot = screenshot,
     Wait = Seconds("wait"),
     Walk = Seconds("walk"),
+    Look = Seconds("look"),
     Delay = Seconds("delay"),
     Jump = options.ContainsKey("jump"),
     Fire = options.ContainsKey("fire"),
