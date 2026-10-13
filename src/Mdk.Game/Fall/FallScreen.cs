@@ -53,7 +53,9 @@ public sealed class FallScreen : IScreen
         var data = ui.Data;
         var bni = Bni.Load(data.PathOf("FALL3D/FALL3D.BNI"));
         var mti = TextureArchive.Load(data.PathOf($"FALL3D/FALL3D_{n}.MTI"));
-        _view = new FallView(ui.Renderer, bni, mti, index, ui.Fti, ui.CanvasMods(state.Level));
+        // The original look has no mod images, but for the wide backdrops: an opt-in extra fitted to the palette.
+        var mods = ui.CanvasMods(state.Level);
+        _view = new FallView(ui.Renderer, bni, mti, index, ui.Fti, mods, mods ?? ui.MenuImages);
         _sounds = new SoundBank([Sni.Load(data.PathOf("FALL3D/FALL3D.SNI"))]);
 
         var models = _view.Models;

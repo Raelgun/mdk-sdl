@@ -87,7 +87,12 @@ public sealed class FallView
     public FallModels Models { get; }
     public FallHud Hud { get; }
 
-    public FallView(Renderer renderer, Bni bni, TextureArchive mti, int index, Fti fti, ModImages? mods = null)
+    /// <summary>Personal tweak: a mod's wider backdrop is <c>NAME_WIDE.png</c> (SPACE, EARTH, LEVELn).</summary>
+    private const string WideSuffix = "_WIDE";
+
+    /// <summary>The fall's view; <paramref name="mods"/>' images for the HUD, <paramref name="wideMods"/>'
+    /// wide backdrops (in both looks, fitted to the palette).</summary>
+    public FallView(Renderer renderer, Bni bni, TextureArchive mti, int index, Fti fti, ModImages? mods = null, ModImages? wideMods = null)
     {
         _renderer = renderer;
         _index = index;
@@ -102,8 +107,9 @@ public sealed class FallView
         Models = new FallModels(renderer, bni, mti, _effects, _palette);
         Hud = new FallHud(renderer, bni, _palette, fti, palette, mods);
 
-        _ground = new FallGround(mti.Textures[$"LEVEL{n}"], mti.Textures[$"POD{n}"]);
-        _groundTexture = renderer.CreateIndexTexture(FallGround.Size, FallGround.Size, _ground.Indices);
+        var groundName = $"LEVEL{n}";
+        _ground = new FallGround(Wide(wideMods, groundName, palette, FallGround.Size) ?? mti.Textures[groundName], mti.Textures[$"POD{n}"]);
+        _groundTexture = renderer.CreateIndexTexture(_ground.Width, FallGround.Size, _ground.Indices);
         for (var i = 1; i <= FallSim.CrawlerFrames; i++)
         {
             if (mti.Textures.TryGetValue($"L{n}_C{i:0000}", out var frame))
@@ -112,9 +118,11 @@ public sealed class FallView
             }
         }
 
-        _space = Image(bni.GetImage("SPACE"));
+        var spacePalette = PaletteOf(bni, "SPACEPAL");
+        _space = Image(Wide(wideMods, "SPACE", spacePalette, (int)ViewSize.Y) ?? bni.GetImage("SPACE"));
         _moon = Image(bni.GetImage("MOON"));
-        _earth = Image(bni.GetImage("EARTH"));
+        var earth = bni.GetImage("EARTH");
+        _earth = Image(Wide(wideMods, "EARTH", spacePalette, earth.Height) ?? earth);
         for (var i = 0; i < FallSim.HazeFrames; i++)
         {
             _haze.Add(HazeTexture(Fall3d.Haze(bni, $"ZOOM{i:0000}")));
@@ -131,6 +139,23 @@ public sealed class FallView
 
     private (int, Vector2) Image(Texture texture) =>
         (_renderer.CreateIndexTexture(texture.Width, texture.Height, texture.Indices), new Vector2(texture.Width, texture.Height));
+
+    /// <summary>Personal tweak: a mod's wider version of a backdrop (<see cref="WideSuffix"/>, the
+    /// original centred in it at any scale), fitted to <paramref name="palette"/> at the original's
+    /// <paramref name="height"/>, so it keeps the original look and the palette effects (the whitening,
+    /// the red) and the ground's track can be written into it; null without one.</summary>
+    private static Texture? Wide(ModImages? mods, string name, Palette palette, int height)
+    {
+        var wideName = name + WideSuffix;
+        var blank = new Texture { Name = wideName, Width = 1, Height = 1, Indices = new byte[1] };
+        if (mods?.Image(wideName, blank, palette) is not { } image || image.Height <= 0)
+        {
+            return null;
+        }
+
+        var (width, rows, indices) = PaletteFit.Fit(image, palette, height);
+        return new Texture { Name = name, Width = width, Height = rows, Indices = indices };
+    }
 
     /// <summary>A haze frame as 8 stacked masks, one per blend offset b (1-8): index 1 where the
     /// pixel's offset is b, so each level draws with its own alpha.</summary>
@@ -218,7 +243,9 @@ public sealed class FallView
     {
         var f = 1f - sim.IntroLeft / (float)FallSim.IntroTicks;
         var origin = new Vector2((width - ViewSize.X) / 2f, 0f);
-        Quad(camera, width, new RectangleF(origin.X, origin.Y, ViewSize.X, ViewSize.Y), BackDepth, Plain(_space.Texture, _spacePalette));
+        // A mod's wide space is as wide as its proportions make it, centred like the original.
+        var spaceWidth = _space.Size.X * ViewSize.Y / _space.Size.Y;
+        Quad(camera, width, new RectangleF((width - spaceWidth) / 2f, origin.Y, spaceWidth, ViewSize.Y), BackDepth, Plain(_space.Texture, _spacePalette));
         float Grow(Vector2 scale) => (scale.X + scale.Y * f) / SpriteUnit;
         var moon = origin + MoonStart - new Vector2(0f, MoonRise * f);
         Sprite(camera, width, _moon, moon, new Vector2(Grow(MoonScale)), BackDepth - LayerStep, _spacePalette);
@@ -232,13 +259,13 @@ public sealed class FallView
         var centreRow = FallGround.CentreRow(sim.Time);
         if (_ground.UpdateTrack(centreRow))
         {
-            _renderer.UpdateTexture(_groundTexture, FallGround.Size, FallGround.Size, _ground.Indices);
+            _renderer.UpdateTexture(_groundTexture, _ground.Width, FallGround.Size, _ground.Indices);
         }
 
-        var (screen, texels) = FallGround.Visible(camera, centreRow, width);
+        var (screen, texels) = FallGround.Visible(camera, centreRow, width, _ground.Width);
         if (screen.Width > 0f)
         {
-            var uv = new RectangleF(texels.X / FallGround.Size, texels.Y / FallGround.Size, texels.Width / FallGround.Size, texels.Height / FallGround.Size);
+            var uv = new RectangleF(texels.X / _ground.Width, texels.Y / FallGround.Size, texels.Width / _ground.Width, texels.Height / FallGround.Size);
             Quad(camera, width, screen, BackDepth, Plain(_groundTexture, _palette), uv);
         }
 

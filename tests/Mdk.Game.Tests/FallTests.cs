@@ -1,4 +1,5 @@
 using System.Numerics;
+using Mdk.Formats;
 using Mdk.Game.Fall;
 using Mdk.Game.Kurt;
 
@@ -171,5 +172,36 @@ public class FallTests
         Assert.Equal(new System.Drawing.RectangleF(0f, 0f, 480f, 360f), screen);
         Assert.Equal(new System.Drawing.RectangleF(272f, 644f, 480f, 360f), texels);
         Assert.Equal(200f, FallGround.CentreRow(FallSim.EndTime), 3);
+    }
+
+    [Fact]
+    public void WideGroundCoversA32By9ViewFromTheStart()
+    {
+        // Personal tweak: 32:9 is 1280 wide; the original leaves 128 pixels each side, a 1536-wide
+        // ground (the original centred) covers it all, the same texels in the middle.
+        var camera = new Vector3(0f, 0f, FallGround.UnitHeight);
+        var (original, _) = FallGround.Visible(camera, FallGround.CentreRow(0f), 1280f);
+        Assert.Equal(new System.Drawing.RectangleF(128f, 0f, 1024f, 360f), original);
+        var (screen, texels) = FallGround.Visible(camera, FallGround.CentreRow(0f), 1280f, 1536);
+        Assert.Equal(new System.Drawing.RectangleF(0f, 0f, 1280f, 360f), screen);
+        Assert.Equal(new System.Drawing.RectangleF(128f, 644f, 1280f, 360f), texels);
+    }
+
+    [Fact]
+    public void WideGroundGetsTheTrackInItsMiddle()
+    {
+        const int Wide = 1536;
+        const byte Track = 9;
+        var ground = new Texture { Width = Wide, Height = FallGround.Size, Indices = new byte[Wide * FallGround.Size] };
+        var pod = new Texture { Width = 128, Height = FallGround.Size, Indices = Enumerable.Repeat(Track, 128 * FallGround.Size).ToArray() };
+        var fall = new FallGround(ground, pod);
+        Assert.True(fall.UpdateTrack(FallGround.CentreRow(0f)));
+
+        // The track's first row: 16 texels each side of the middle column (768).
+        var row = (int)MathF.Round(FallGround.CentreRow(0f) - 108f * 80f / 256f);
+        Assert.Equal(Track, fall.Indices[row * Wide + 768 - 16]);
+        Assert.Equal(Track, fall.Indices[row * Wide + 768 + 15]);
+        Assert.Equal(0, fall.Indices[row * Wide + 768 - 17]);
+        Assert.Equal(0, fall.Indices[row * Wide + 768 + 16]);
     }
 }

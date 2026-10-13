@@ -13,11 +13,13 @@ namespace Mdk.Game.Fall;
 ///
 ///   track rows from R = round(A − 33.75):   ┌──┐  16 + 2j/3 texels each side of 512 (row R + j)
 ///                                          ┌┘  └┐ 32 from 24 rows on
-/// </code></summary>
+/// </code>
+/// Personal tweak: a mod's wider ground (<c>LEVELn_WIDE.png</c>, the original centred in it) has its
+/// centre column at the middle of its width, so it covers the sides of a wide window from the start.</summary>
 public sealed class FallGround
 {
+    /// <summary>The original's size; a wide ground is as high, and wider.</summary>
     public const int Size = 1024;
-    private const float CentreColumn = 512f;
     private const float Parallax = 0.36f;
     /// <summary>The camera height at which one texel is one pixel.</summary>
     public const float UnitHeight = 5280f;
@@ -40,12 +42,18 @@ public sealed class FallGround
     /// <summary>The ground with the track as written so far.</summary>
     public byte[] Indices { get; }
 
+    /// <summary>The ground's width in texels (<see cref="Size"/>, or a wide ground's).</summary>
+    public int Width { get; }
+
     public FallGround(Texture ground, Texture pod)
     {
         _ground = ground.Indices;
         _pod = pod;
+        Width = ground.Width;
         Indices = (byte[])_ground.Clone();
     }
+
+    private static float CentreColumn(int width) => width / 2f;
 
     /// <summary>The texel row at the view's centre after <paramref name="time"/> seconds of fall.</summary>
     public static float CentreRow(float time) => StartRow - RowsOverFall * time / FallSim.EndTime;
@@ -68,21 +76,21 @@ public sealed class FallGround
         {
             var w = TrackWidth(y - row);
             var podX = _pod.Width / 2 - w;
-            Array.Copy(_pod.Indices, y * _pod.Width + podX, Indices, y * Size + (int)CentreColumn - w, 2 * w);
+            Array.Copy(_pod.Indices, y * _pod.Width + podX, Indices, y * Width + (int)CentreColumn(Width) - w, 2 * w);
         }
 
         _trackRow = row;
         return true;
     }
 
-    /// <summary>The part of the view (<paramref name="width"/> x 360 pixels) the texture covers, and
-    /// its texels; empty when the view is off the texture.</summary>
-    public static (RectangleF Screen, RectangleF Texels) Visible(Vector3 camera, float centreRow, float width)
+    /// <summary>The part of the view (<paramref name="width"/> x 360 pixels) the texture (<paramref name="groundWidth"/>
+    /// texels wide) covers, and its texels; empty when the view is off the texture.</summary>
+    public static (RectangleF Screen, RectangleF Texels) Visible(Vector3 camera, float centreRow, float width, int groundWidth = Size)
     {
         var s = camera.Z / UnitHeight;
-        var u0 = CentreColumn + Parallax * camera.X - s * width / 2f;
+        var u0 = CentreColumn(groundWidth) + Parallax * camera.X - s * width / 2f;
         var v0 = centreRow - Parallax * camera.Y - s * ViewCentreY;
-        var texels = RectangleF.Intersect(new RectangleF(u0, v0, s * width, s * 2f * ViewCentreY), new RectangleF(0f, 0f, Size, Size));
+        var texels = RectangleF.Intersect(new RectangleF(u0, v0, s * width, s * 2f * ViewCentreY), new RectangleF(0f, 0f, groundWidth, Size));
         if (texels.Width <= 0f || texels.Height <= 0f || s <= 0f)
         {
             return (RectangleF.Empty, RectangleF.Empty);
