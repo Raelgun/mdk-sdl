@@ -93,7 +93,25 @@ as-is: see the legal note.
   textures use this; hand-made mods rarely need it.
 
 Not replaceable: the sky, effects' sprites (explosions, sparks), the fall's and the stream's 3D
-views, videos, the statistics pages are by name only (not exported).
+views (but for the fall's wide backdrops, below), videos, the statistics pages are by name only (not
+exported).
+
+## Ultrawide textures: `NAME_WIDE.png`
+
+Some 2D pictures are made for 4:3 and leave the sides of a wider window empty. A mod can give a wider
+version of each as `images/NAME_WIDE.png` in its top `images` folder (not a level's). These names
+have no original, so they aren't in the export. All of them work in both looks; with none, the game
+draws the original as before.
+
+| Image | Original | Wide version for 32:9, at the original's scale |
+|---|---|---|
+| `SNIPERS1_WIDE` | the scope's frame, 640 x 480 | 1707 x 480 (or 5120 x 1440 at 3x) |
+| `SPACE_WIDE` | the fall's intro: the stars, 600 x 360 | 1280 x 360 |
+| `EARTH_WIDE` | the fall's intro: the earth, 512 x 512 | 1152 x 512 |
+| `LEVEL1_WIDE` ... `LEVEL5_WIDE` | the ground of each fall, 1024 x 1024 | 1536 x 1024 |
+
+Make each one at any scale with the original **centred in it at the same scale**. The game lines
+the middle up with the original.
 
 ### Wide scope frame: `SNIPERS1_WIDE.png`
 
@@ -112,6 +130,23 @@ the middle between black bars. A mod can continue it to the sides with `images/S
   images otherwise) draws it fitted to the scope's own 256 colours, dithered, on the screen's pixel
   grid (480 rows), so a wide frame keeps the original look's palette. Put it in the mod's top
   `images` folder (not a level's).
+
+### The fall's backdrops: `SPACE_WIDE`, `EARTH_WIDE`, `LEVEL1_WIDE` ... `LEVEL5_WIDE`
+
+The orbit drop before each level has 2D backdrops: in the intro the stars (`SPACE`), drawn 600
+pixels wide whatever the window, and the earth (`EARTH`) rising under them, and during the drop
+the ground (`LEVELn`, one per fall), which fills a 32:9 window only after about 16 seconds.
+
+- In both looks the image is fitted to the fall's 256 colours (`SPACEPAL`, or the fall's own
+  palette for its ground), dithered, at the original's height (360, 512, 1024 rows), so it keeps
+  the original look and the palette effects: the whitening at the start and the red of a hit.
+- `SPACE_WIDE`: fill all of it. A window narrower than the image crops it; a wider one shows black
+  beyond it.
+- `EARTH_WIDE`: the game draws the earth squashed to under half its height, so a whole round globe
+  becomes a flat oval. Continue the original's horizon outwards to the sides of the image instead,
+  with the planet filling everything below it and only the space above it transparent.
+- `LEVELn_WIDE`: fill all of it, as high as the original. The minecrawler's track is drawn into
+  its middle column. Only about the inner 1300 columns and rows 380-1000 can be on screen.
 
 ### Example: replace a floor texture (LEVEL3's start)
 
