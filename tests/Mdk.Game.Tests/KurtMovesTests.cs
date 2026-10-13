@@ -402,21 +402,31 @@ public class KurtMovesTests
     }
 
     [DataFact]
-    public void AnObjectInTheViewPushesKurtForward()
+    public void AnObjectInTheViewPushesKurtForwardGradually()
     {
         var space = SpaceOf(3);
         var kurt = KurtIn(space, Pad, FacingWest);
         Run(kurt, new Input(), 1f);
 
         // An object's face 4 units behind him (the camera is 8 behind).
-        var face = kurt.Feet.X + 4f;
+        var start = kurt.Feet.X;
+        var face = start + 4f;
         var camera = new FollowCamera(space)
         {
             ClipView = (from, to) => to.X <= face ? to : Vector3.Lerp(from, to, (face - from.X) / (to.X - from.X)),
         };
         Run(kurt, new Input(), Step, camera);
 
-        // One step: Kurt goes forward by what was cut off, the camera with him.
+        // Personal tweak (FollowCamera.MaxPushSpeed, 40 u/s): one step pushes him only part of the way,
+        // so a door behind him doesn't "fast-forward" him.
+        Assert.InRange(start - kurt.Feet.X, 0.01f, 40f * Step + 0.01f);
+
+        // A few steps on (4 cut off at 40 u/s), he has gone forward by all of it, the camera with him.
+        for (var i = 0; i < 5; i++)
+        {
+            Run(kurt, new Input(), Step, camera);
+        }
+
         Assert.Equal(face, camera.Position.X, 0.01f);
         Assert.Equal(face - 7.97f, kurt.Feet.X, 0.05f);
     }
