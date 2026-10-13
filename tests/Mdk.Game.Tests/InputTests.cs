@@ -34,6 +34,30 @@ public class InputTests
     }
 
     [Fact]
+    public void RunLockRunsAndHoldingRunWalks()
+    {
+        // Personal tweak: the original's SetTurbo.
+        var input = NewInput();
+        Assert.False(input.IsDown(Key.Turbo));
+        input.RunLocked = true;
+        Assert.True(input.IsDown(Key.Turbo));
+        input.Hold(Key.Turbo, Input.State.Down);
+        Assert.False(input.IsDown(Key.Turbo));
+        input.RunLocked = false;
+        Assert.True(input.IsDown(Key.Turbo));
+    }
+
+    [Fact]
+    public void CapsLockAndL3LockRun()
+    {
+        var input = NewInput();
+        input.SetKey(SDL_Scancode.SDL_SCANCODE_CAPSLOCK, Input.State.Down, Repeat.No);
+        Assert.True(input.WasPressed(Key.RunLock));
+        Assert.False(input.IsDown(Key.Turbo));
+        Assert.Equal(Key.RunLock, GamepadMap.Game(PadButton.LeftStick));
+    }
+
+    [Fact]
     public void EUsesTheItemAndFliesUp()
     {
         var input = NewInput();

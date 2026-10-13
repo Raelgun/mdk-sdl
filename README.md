@@ -272,7 +272,7 @@ From the main menu or the pause menu; a page per kind, each change applied and s
 - **Mods**: each mod on or off, "Make HD textures" (desktop), "Import from folder" (Android).
 
 Gamepads (Xbox, PlayStation, Switch, Android Bluetooth pads), by default: left stick walks, right
-stick looks, RT fires, LT toggles sniper mode, A jumps, B runs (turbo), X uses the item, Y / RB /
+stick looks, RT fires, LT toggles sniper mode, A jumps, B runs (turbo), L3 locks running on or off, X uses the item, Y / RB /
 d-pad right the next item, LB / d-pad left the previous one, d-pad up and down zoom, Start
 pauses. In the menus: d-pad or left stick, A accepts, B or Start goes back.
 
@@ -287,7 +287,7 @@ Display: 3440x1440 @ 144 Hz, window 1280x960 (windowed), render target 1280x960,
 ```
 
 Controls: W/S or Up/Down to run, A/D to strafe, the mouse or Left/Right to turn, Space to jump
-(hold it while falling to open the chute; running into a ledge while falling grabs it), Shift for turbo, Ctrl or the left mouse button to fire,
+(hold it while falling to open the chute; running into a ledge while falling grabs it), Shift for turbo (Caps Lock locks it on; holding Shift then walks), Ctrl or the left mouse button to fire,
 Enter or E to use the item, Tab, [ ] or the mouse wheel to select it (or 1-5), the right mouse button for sniper mode
 (the mouse wheel or PageUp/PageDown zoom, Tab or [ ] select the ammo), F1 for the flying camera (E/Q to go up and
 down), F2 for a quick save (the original's full save: the name is asked, the level's number

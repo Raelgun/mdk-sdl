@@ -20,6 +20,9 @@ public enum Key
     RollLeft, RollRight, Teleport,
     /// <summary>The level's full save (the original's F2), and loading the latest save.</summary>
     QuickSave, QuickLoad,
+    /// <summary>Personal tweak: run on or off without holding <see cref="Turbo"/> (the original's
+    /// SetTurbo, <see cref="Input.RunLocked"/>).</summary>
+    RunLock,
 }
 
 /// <summary>Keys of the menus and prompts: fixed, whatever the game's bindings.</summary>
@@ -51,6 +54,7 @@ public sealed class Input
         [SDL_Scancode.SDL_SCANCODE_SPACE] = Key.Jump,
         [SDL_Scancode.SDL_SCANCODE_LSHIFT] = Key.Turbo,
         [SDL_Scancode.SDL_SCANCODE_RSHIFT] = Key.Turbo,
+        [SDL_Scancode.SDL_SCANCODE_CAPSLOCK] = Key.RunLock,
         [SDL_Scancode.SDL_SCANCODE_LCTRL] = Key.Fire,
         [SDL_Scancode.SDL_SCANCODE_RCTRL] = Key.Fire,
         [SDL_Scancode.SDL_SCANCODE_RETURN] = Key.UseItem,
@@ -242,7 +246,13 @@ public sealed class Input
     /// <summary>The digit (0-9) pressed this frame, or <see cref="NoDigit"/>.</summary>
     public int Digit { get; private set; } = NoDigit;
 
-    public bool IsDown(Key key) =>
+    /// <summary>Personal tweak: <see cref="Key.RunLock"/> toggled running on: <see cref="Key.Turbo"/>
+    /// counts as held, and holding it walks.</summary>
+    public bool RunLocked { get; set; }
+
+    public bool IsDown(Key key) => key == Key.Turbo ? Held(key) != RunLocked : Held(key);
+
+    private bool Held(Key key) =>
         _down.Contains(key) || _buttons.Contains(key) || _fly.Contains(key) || _wheel.Contains(key) || _held.Contains(key) || _touched.Contains(key) || _pad.Contains(key);
 
     /// <summary>Holds or releases a key from the program (automated tests).</summary>

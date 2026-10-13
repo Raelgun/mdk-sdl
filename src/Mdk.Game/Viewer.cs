@@ -402,6 +402,12 @@ public sealed class Viewer : IScreen
             return Event.None;
         }
 
+        // Personal tweak: run lock (the original's SetTurbo) toggles running for Kurt and the flying camera.
+        if (input.WasPressed(Key.RunLock))
+        {
+            input.RunLocked = !input.RunLocked;
+        }
+
         if (input.WasPressed(Key.Fly))
         {
             _flying = !_flying;

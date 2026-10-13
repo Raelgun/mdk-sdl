@@ -54,7 +54,7 @@ echo "$OUT" | grep -q "^Menu: Mode: Off | Separation: 0.25 | Convergence: 10 | H
 OUT=$(run --menu --controls --wait=1)
 echo "$OUT" | grep -q "^Menu: Mouse sensitivity: 1.00 | Invert mouse: Off | Forward: W | .* | Quick load: F9 | Default keys | Back$"; check "controls page" $?
 OUT=$(run --menu --gamepad --wait=1)
-echo "$OUT" | grep -q "^Menu: Look sensitivity: 1.00 | Invert look: Off | Jump: A | Run: B | Fire: RT | Sniper mode: LT | .* | Quick load: - | Default buttons | Back$"; check "gamepad page" $?
+echo "$OUT" | grep -q "^Menu: Look sensitivity: 1.00 | Invert look: Off | Jump: A | Run: B | Run lock: L3 | Fire: RT | Sniper mode: LT | .* | Quick load: - | Default buttons | Back$"; check "gamepad page" $?
 
 # -nobloodno / -bloodyes (not saved) set gore (Options, Graphics).
 OUT=$(run --menu --options --nobloodno --press=Menu.Down@0.3,Menu.Accept@0.5 --wait=1)
