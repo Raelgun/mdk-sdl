@@ -581,12 +581,28 @@ public sealed class MdkObject : ISoundSource
         return Position + Vector3.Transform(Model.ReferencePoints[index] * Scale, Matrix4x4.CreateRotationZ(float.DegreesToRadians(Yaw)));
     }
 
-    /// <summary>World position of the centre of a model part (rest pose).</summary>
+    /// <summary>World position of the centre of a model part, in the current pose as drawn: an animated
+    /// model's parts stand where the animation puts them (the rest pose can leave them at the origin,
+    /// e.g. LEVEL7's boss XB1, whose GUN rested at his feet so its BIGBOLTs hit the floor at once).</summary>
     public Vector3 PartCenter(int part)
     {
         if (part < 0 || Model == null)
         {
             return Position;
+        }
+
+        var pose = PoseParts();
+        if (part < pose.Length && pose[part].Length > 0)
+        {
+            var min = new Vector3(float.MaxValue);
+            var max = new Vector3(float.MinValue);
+            foreach (var vertex in pose[part])
+            {
+                min = Vector3.Min(min, vertex);
+                max = Vector3.Max(max, vertex);
+            }
+
+            return Vector3.Transform((min + max) / 2f, Transform);
         }
 
         var bounds = Model.PartList[part].Bounds;
