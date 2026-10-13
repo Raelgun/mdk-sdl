@@ -640,7 +640,7 @@ public sealed class Viewer : IScreen
         _ropes.Draw(_scripts.Objects);
         _sniper.Draw(_kurt, _scripts, elapsed);
         _effects.Draw(_scripts, camera);
-        _sprite.Draw(_kurt, camera.Position, eye.Forward, eye.Up, eye.FieldOfView);
+        _sprite.Draw(_kurt, camera.Position, eye.Forward, eye.Up, eye.FieldOfView, _space);
 
         _hud.Messages.Update(elapsed);
         _hud.Draw(HudStateOf(_kurt, _scripts, _hudSlots));
