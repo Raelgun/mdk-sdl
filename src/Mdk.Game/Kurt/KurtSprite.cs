@@ -8,12 +8,16 @@ namespace Mdk.Game.Kurt;
 
 /// <summary>Draws Kurt like the original: a sprite frame at a fixed size on screen (one pixel is
 /// 1/360 of the view's height), its hotspot 101 pixels above his projected feet, depth-tested at
-/// the feet's depth. The enhanced look takes mods' images of its frames (<see cref="ModImages"/>).
+/// the feet's depth. The original draws no depth: Kurt covers the floor he stands on. Here the
+/// rows from just above the feet down (the shadow) are brought nearer the camera, the same on
+/// screen, so that uneven floor around the feet doesn't cut them. The enhanced look takes mods'
+/// images of its frames (<see cref="ModImages"/>).
 /// <code>
-///      ┌──────┐  frame
+///      ┌──────┐  frame, at the feet's depth
 ///      │  ☺   │
 ///      │ /|\  │  hotspot + (0, 101) ─► the feet
-///      └──────┘
+///      ├──────┤  ─┐ from half a unit above the feet: 2 units nearer
+///      └──────┘  ─┘ (the shadow)
 /// </code></summary>
 public sealed class KurtSprite
 {
@@ -21,6 +25,13 @@ public sealed class KurtSprite
     private const int FeetOffset = 101;
     private const float ViewHeight = 360f;
     private const int QuadVertices = 6;
+    /// <summary>A frame's two quads: the body, and the feet with the shadow brought nearer.</summary>
+    private const int FrameVertices = 2 * QuadVertices;
+    /// <summary>The nearer rows start this high above the feet (world units), over floor bumps.</summary>
+    private const float FeetRise = 0.5f;
+    /// <summary>The nearer rows are this much nearer (world units), at most down to a share of the depth.</summary>
+    private const float ShadowPull = 2f;
+    private const float MinDepthShare = 0.5f;
     /// <summary>The chute is painted in Kurt's frames (damp_animate 0x4646a4): K_CHUTE 0-4 open it,
     /// then K_CHUTEC sways back and forth.</summary>
     private const string ChuteOpening = "K_CHUTE";
@@ -96,7 +107,7 @@ public sealed class KurtSprite
         _colours = palette;
         _mods = mods;
         _palette = renderer.CreatePalette(palette.Rgba);
-        _mesh = renderer.CreateDynamicMesh(QuadVertices);
+        _mesh = renderer.CreateDynamicMesh(FrameVertices);
         _muzzleMesh = renderer.CreateDynamicMesh(QuadVertices);
         foreach (var name in Animations.Values.Select(a => a.Name).Append(ChuteSway).Append(MuzzleFlash).Append(BackUp).Distinct())
         {
@@ -171,7 +182,7 @@ public sealed class KurtSprite
         var flip = (kurt.Current == Kurt.State.Side && kurt.StrafeSpeed < 0f) || kurt.Current == Kurt.State.RollLeft ? -1f : 1f;
         var (name, frame) = Pick(kurt);
         var quad = new Quad(kurt.Feet, right * (pixel * flip), up * pixel);
-        DrawFrame(_mesh, name, frame, quad, 0, 0);
+        DrawFrame(_mesh, name, frame, quad, 0, 0, new Pull(eye, Nearer(depth), FeetRise / pixel));
 
         // The flash's hotspot is at Kurt's hotspot plus its offset.
         if (kurt.Muzzle is { } muzzle)
@@ -184,8 +195,13 @@ public sealed class KurtSprite
     /// <summary>Where a frame goes: the feet, and the world vectors of one sprite pixel right and up.</summary>
     private readonly record struct Quad(Vector3 Feet, Vector3 Right, Vector3 Up);
 
-    /// <summary>Draws a frame with its hotspot 101 pixels above the feet, moved by (dx, dy) pixels (y down).</summary>
-    private void DrawFrame(int mesh, string name, int frame, Quad at, int dx, int dy)
+    /// <summary>The rows from <paramref name="Rise"/> pixels above the feet down, scaled towards the
+    /// <paramref name="Eye"/> by <paramref name="Scale"/>: nearer, the same on screen.</summary>
+    private readonly record struct Pull(Vector3 Eye, float Scale, float Rise);
+
+    /// <summary>Draws a frame with its hotspot 101 pixels above the feet, moved by (dx, dy) pixels (y down);
+    /// with a <paramref name="pull"/>, its feet and shadow nearer.</summary>
+    private void DrawFrame(int mesh, string name, int frame, Quad at, int dx, int dy, Pull? pull = null)
     {
         var image = Animation(name).GetFrame(frame);
         var w = image.Image.Width;
@@ -193,15 +209,40 @@ public sealed class KurtSprite
         var ax = image.HotspotX - dx;
         var ay = image.HotspotY + FeetOffset - dy;
 
-        Vector3 Corner(float px, float py) => at.Feet + at.Right * (px - ax) + at.Up * (ay - py);
-        Span<Vertex> quad =
-        [
-            new(Corner(0, 0), new Vector2(0, 0)), new(Corner(w, 0), new Vector2(1, 0)), new(Corner(w, h), new Vector2(1, 1)),
-            new(Corner(0, 0), new Vector2(0, 0)), new(Corner(w, h), new Vector2(1, 1)), new(Corner(0, h), new Vector2(0, 1)),
-        ];
-        _renderer.UpdateMesh(mesh, quad);
-        _renderer.Draw(mesh, 0, QuadVertices, MaterialOf(name, frame, image.Image));
+        Span<Vertex> vertices = stackalloc Vertex[FrameVertices];
+        var split = pull is { } p ? Math.Clamp(ay - p.Rise, 0f, h) : h;
+        var count = Rows(vertices, at, ax, ay, w, h, 0, split, null);
+        count += Rows(vertices[count..], at, ax, ay, w, h, split, h, pull);
+
+        _renderer.UpdateMesh(mesh, vertices[..count]);
+        _renderer.Draw(mesh, 0, count, MaterialOf(name, frame, image.Image));
     }
+
+    /// <summary>The quad of a frame's rows <paramref name="top"/> to <paramref name="bottom"/>, with
+    /// the <paramref name="pull"/>'s scale. Returns its vertex count (0 when empty).</summary>
+    private static int Rows(Span<Vertex> into, Quad at, float ax, float ay, int w, int h, float top, float bottom, Pull? pull)
+    {
+        if (bottom <= top)
+        {
+            return 0;
+        }
+
+        Vector3 Corner(float px, float py) => at.Feet + at.Right * (px - ax) + at.Up * (ay - py);
+        var scale = pull?.Scale ?? 1f;
+        var origin = pull?.Eye ?? Vector3.Zero;
+        Vertex V(float px, float py) => new(origin + (Corner(px, py) - origin) * scale, new Vector2(px / w, py / h));
+        into[0] = V(0, top);
+        into[1] = V(w, top);
+        into[2] = V(w, bottom);
+        into[3] = V(0, top);
+        into[4] = V(w, bottom);
+        into[5] = V(0, bottom);
+        return QuadVertices;
+    }
+
+    /// <summary>The scale towards the eye bringing the feet's rows <see cref="ShadowPull"/> nearer
+    /// than the feet's <paramref name="depth"/> (8 behind the follow camera: 0.75).</summary>
+    public static float Nearer(float depth) => MathF.Max(MinDepthShare, (depth - ShadowPull) / depth);
 
     /// <summary>The animation and frame of Kurt's state; the chute opens, then sways.</summary>
     private (string Name, int Frame) Pick(Kurt kurt)
