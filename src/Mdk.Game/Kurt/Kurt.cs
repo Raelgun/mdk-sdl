@@ -137,6 +137,14 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
     {
         // The scope's own bindings (zoom, the wheel) apply while he snipes, whatever else this step does.
         input.Scoped = Sniping;
+        UpdateStep(input, delta);
+        // Entering or leaving the scope this step switches the bindings now, not a step late: a wheel
+        // notch right after the sniper key zooms (or, rebound, does its scope action).
+        input.Scoped = Sniping;
+    }
+
+    private void UpdateStep(Input input, float delta)
+    {
         Invulnerable = MathF.Max(Invulnerable - delta, 0f);
         ChuteClosing = false;
         if (Frozen)
