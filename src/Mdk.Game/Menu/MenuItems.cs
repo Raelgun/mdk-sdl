@@ -8,6 +8,7 @@ using Mdk.Engine.Render;
 using Mdk.Formats;
 using Mdk.Game.Flow;
 using Mdk.Game.HdTextures;
+using Mdk.Game.Hud;
 using Mdk.Game.Kurt;
 using Mdk.Game.Mods;
 
@@ -29,6 +30,10 @@ public sealed class MenuItems
 
     private enum Kind { Item, Title }
 
+    /// <summary>Personal tweak: where an item stands across the page: a row of its own, or the left or
+    /// right of two columns (the controls pages' bindings, as the original's controls screen).</summary>
+    private enum Column { Both, Left, Right }
+
     /// <summary>What a binding waits for: a key or mouse button, or a gamepad button.</summary>
     private enum Device { Keyboard, Gamepad }
 
@@ -36,6 +41,9 @@ public sealed class MenuItems
     {
         public string Text = text;
         public readonly Kind Kind = kind;
+        public Column Column = Column.Both;
+        /// <summary>The row it stands in (<see cref="Layout"/>).</summary>
+        public int Row;
         public readonly Action? Press = press;
         /// <summary>An option: changed by a step (+1 or -1).</summary>
         public readonly Action<int>? Change = change;
@@ -53,6 +61,8 @@ public sealed class MenuItems
     /// <summary>The baseline is 26 below the row's top.</summary>
     private const float Baseline = 26f / 36f;
     private const float SmallFontRow = 24f;
+    /// <summary>Between the two columns (<see cref="Column"/>).</summary>
+    private const float ColumnGap = 24f;
     private const float Small = 0.65f;
     /// <summary>0.35 x 0.2 per tick.</summary>
     private const float GrowRate = 0.07f * 30f;
@@ -83,6 +93,8 @@ public sealed class MenuItems
     private readonly Sound? _change;
     private int _songVoice;
     private int _selected = -1;
+    /// <summary>The page's font (<see cref="Layout"/>).</summary>
+    private FontView? _font;
     /// <summary>The controls page waits for a key, or a gamepad button, for this action (from the next
     /// frame on).</summary>
     private Key? _waiting;
@@ -277,6 +289,16 @@ public sealed class MenuItems
 
         if (selected.Change == null)
         {
+            // Personal tweak: Left and Right go across the two columns.
+            if (input.WasPressed(MenuKey.Right))
+            {
+                Across(Column.Right);
+            }
+            else if (input.WasPressed(MenuKey.Left))
+            {
+                Across(Column.Left);
+            }
+
             return;
         }
 
@@ -310,19 +332,64 @@ public sealed class MenuItems
         }
     }
 
-    /// <summary>The next selectable item up or down.</summary>
+    /// <summary>The selectable item in the nearest row up or down: in two columns, the same column's
+    /// (from a whole row, the left one's).</summary>
     private void Move(int step)
     {
-        for (var i = _selected + step; i >= 0 && i < _entries.Count; i += step)
+        if (_selected < 0)
         {
-            if (!_entries[i].Selectable)
+            return;
+        }
+
+        var current = _entries[_selected];
+        var column = current.Column == Column.Both ? Column.Left : current.Column;
+        var best = -1;
+        for (var i = 0; i < _entries.Count; i++)
+        {
+            var entry = _entries[i];
+            var distance = (entry.Row - current.Row) * step;
+            if (!entry.Selectable || distance <= 0)
             {
                 continue;
             }
 
-            // Personal tweak: moving the highlight is silent; the sound plays on accept/click only.
-            _selected = i;
+            var bestDistance = best < 0 ? int.MaxValue : (_entries[best].Row - current.Row) * step;
+            if (distance < bestDistance || (distance == bestDistance && entry.Column == column))
+            {
+                best = i;
+            }
+        }
+
+        // Personal tweak: moving the highlight is silent; the sound plays on accept/click only.
+        if (best >= 0)
+        {
+            _selected = best;
+        }
+    }
+
+    /// <summary>Personal tweak: the other column's selectable item in the nearest row.</summary>
+    private void Across(Column column)
+    {
+        var current = _entries[_selected];
+        if (current.Column == Column.Both || current.Column == column)
+        {
             return;
+        }
+
+        var best = -1;
+        for (var i = 0; i < _entries.Count; i++)
+        {
+            var entry = _entries[i];
+            if (entry.Selectable && entry.Column == column
+                && (best < 0 || Math.Abs(entry.Row - current.Row) < Math.Abs(_entries[best].Row - current.Row)))
+            {
+                best = i;
+            }
+        }
+
+        if (best >= 0)
+        {
+            _selected = best;
         }
     }
 
@@ -351,15 +418,61 @@ public sealed class MenuItems
             return;
         }
 
-        var row = RowFor(_entries.Count);
-        var font = UsesBigFont(row) ? _fonts.Big : _fonts.Small;
-        var width = _entries.Max(e => font.Width(Encoding.ASCII.GetBytes(e.Text)));
-        var x = Alignment == Align.Left ? 0f : (ScreenView.Size.X - width) / 2f;
-        for (var i = 0; i < _entries.Count; i++)
+        // Rows: an item of its own, or a pair of columns side by side (the right one's items from the
+        // left one's first row on).
+        var rows = 0;
+        var right = -1;
+        foreach (var entry in _entries)
         {
-            _entries[i].Area = new RectangleF(x, RowTop(row, i + FirstRow), width, row);
+            if (entry.Column == Column.Both)
+            {
+                entry.Row = rows++;
+                right = -1;
+                continue;
+            }
+
+            if (right < 0)
+            {
+                right = rows;
+            }
+
+            entry.Row = entry.Column == Column.Left ? rows++ : right++;
+            rows = Math.Max(rows, right);
+        }
+
+        var row = RowFor(rows);
+        var font = UsesBigFont(row) ? _fonts.Big : _fonts.Small;
+        var columns = _entries.Any(e => e.Column != Column.Both);
+
+        // Personal tweak: two columns too wide for the big font take the small one.
+        if (columns && font == _fonts.Big && 2f * ColumnWidth(font) + ColumnGap > ScreenView.Size.X)
+        {
+            font = _fonts.Small;
+        }
+
+        _font = font;
+        var width = WidthOf(font, Column.Both);
+        var x = Alignment == Align.Left ? 0f : (ScreenView.Size.X - width) / 2f;
+        var columnWidth = columns ? ColumnWidth(font) : 0f;
+        var centre = ScreenView.Size.X / 2f;
+        foreach (var entry in _entries)
+        {
+            var top = RowTop(row, entry.Row + FirstRow);
+            entry.Area = entry.Column switch
+            {
+                Column.Left => new RectangleF(centre - ColumnGap / 2f - columnWidth, top, columnWidth, row),
+                Column.Right => new RectangleF(centre + ColumnGap / 2f, top, columnWidth, row),
+                _ => new RectangleF(x, top, width, row),
+            };
         }
     }
+
+    /// <summary>The widest text of a column's items (0 without any).</summary>
+    private float WidthOf(FontView font, Column column) =>
+        _entries.Where(e => e.Column == column).Select(e => font.Width(Encoding.ASCII.GetBytes(e.Text))).DefaultIfEmpty(0).Max();
+
+    /// <summary>Both columns are as wide as the wider one, so they split the page evenly.</summary>
+    private float ColumnWidth(FontView font) => MathF.Max(WidthOf(font, Column.Left), WidthOf(font, Column.Right));
 
     /// <summary>The height of a row for a page of <paramref name="entries"/> items: 36, less when they don't fit.</summary>
     public static float RowFor(int entries) => MathF.Min(Row, (ScreenView.Size.Y - Top * 2f) / Math.Max(entries, 1));
@@ -380,7 +493,7 @@ public sealed class MenuItems
         // A press may have just opened another page: its items have no rows yet.
         Layout();
         var row = _entries[0].Area.Height;
-        var font = UsesBigFont(row) ? _fonts.Big : _fonts.Small;
+        var font = _font ?? (UsesBigFont(row) ? _fonts.Big : _fonts.Small);
         var baseline = MathF.Round(row * Baseline);
         foreach (var entry in _entries)
         {
@@ -670,6 +783,7 @@ public sealed class MenuItems
         AddOption(() => string.Create(CultureInfo.InvariantCulture, $"Mouse sensitivity: {s.MouseSensitivity:0.00}"),
             step => s.MouseSensitivity = SensitivityStep(s.MouseSensitivity, step));
         AddOption(() => $"Invert mouse: {OnOff(s.InvertMouse)}", _ => s.InvertMouse = !s.InvertMouse);
+        var bindings = new List<Entry>();
         foreach (var (key, name) in Settings.Actions)
         {
             Entry? entry = null;
@@ -681,9 +795,10 @@ public sealed class MenuItems
                 _armed = false;
                 entry!.Text = $"{name}: press a key...";
             }, null);
-            Add(entry);
+            bindings.Add(entry);
         }
 
+        AddColumns(bindings);
         AddItem("Default keys", () =>
         {
             _ui.Settings.Bindings.Clear();
@@ -709,6 +824,7 @@ public sealed class MenuItems
         AddOption(() => string.Create(CultureInfo.InvariantCulture, $"Look sensitivity: {s.PadSensitivity:0.00}"),
             step => s.PadSensitivity = SensitivityStep(s.PadSensitivity, step));
         AddOption(() => $"Invert look: {OnOff(s.InvertPad)}", _ => s.InvertPad = !s.InvertPad);
+        var bindings = new List<Entry>();
         foreach (var (key, name) in Settings.PadActions)
         {
             Entry? entry = null;
@@ -720,9 +836,10 @@ public sealed class MenuItems
                 _armed = false;
                 entry!.Text = $"{name}: press a button...";
             }, null);
-            Add(entry);
+            bindings.Add(entry);
         }
 
+        AddColumns(bindings);
         AddItem("Default buttons", () =>
         {
             _ui.Settings.PadBindings.Clear();
@@ -730,6 +847,18 @@ public sealed class MenuItems
             ShowGamepad(back);
         });
         EndPage(back);
+    }
+
+    /// <summary>Personal tweak: the bindings in two columns, the first half on the left (the original's
+    /// controls screen); a page of one column had no room for another binding.</summary>
+    private void AddColumns(List<Entry> entries)
+    {
+        var half = (entries.Count + 1) / 2;
+        for (var i = 0; i < entries.Count; i++)
+        {
+            entries[i].Column = i < half ? Column.Left : Column.Right;
+            Add(entries[i]);
+        }
     }
 
     /// <summary>The key or button pressed after the item was chosen becomes the binding.</summary>
