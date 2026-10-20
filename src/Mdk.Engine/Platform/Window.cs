@@ -342,6 +342,14 @@ public sealed unsafe class Window : IDisposable
         }
 
         _gamepads?.Update(input);
+
+        // Caps Lock's light ("always run"); a hidden window (tests) ignores the real keyboard's.
+        if (Visibility == Visibility.Shown)
+        {
+            var locked = (SDL_GetModState() & SDL_Keymod.SDL_KMOD_CAPS) != 0;
+            input.LockCaps(locked ? Input.Lock.On : Input.Lock.Off);
+        }
+
         return true;
     }
 

@@ -20,7 +20,7 @@ public enum Key
     RollLeft, RollRight, Teleport,
     /// <summary>The level's full save (the original's F2), and loading the latest save.</summary>
     QuickSave, QuickLoad,
-    /// <summary>Turbo on until pressed again (the original's Caps Lock).</summary>
+    /// <summary>Turbo on until pressed again; on Caps Lock, while it is locked (the original's).</summary>
     AlwaysRun,
 }
 
@@ -39,6 +39,8 @@ public enum Pointer { Left, Right }
 public sealed class Input
 {
     public enum State { Up, Down }
+    /// <summary>A lock key's state (Caps Lock: its light).</summary>
+    public enum Lock { Off, On }
 
     private static readonly Dictionary<SDL_Scancode, Key> DefaultKeys = new()
     {
@@ -190,6 +192,8 @@ public sealed class Input
     private readonly HashSet<PadButton> _padHeld = [];
     /// <summary>Turbo is held until "always run" is pressed again (<see cref="ToggleRun"/>).</summary>
     private bool _alwaysRun;
+    /// <summary>Caps Lock's state: "always run" bound to it follows the lock, not its presses.</summary>
+    private Lock _capsLock;
 
     /// <summary>The game's degrees a mouse count turns (Kurt, the cameras): the gamepad's and the
     /// gyroscope's look in degrees becomes mouse counts.</summary>
@@ -225,10 +229,17 @@ public sealed class Input
 
     public bool IsDown(Key key) =>
         _down.Contains(key) || _buttons.Contains(key) || _fly.Contains(key) || _wheel.Contains(key) || _held.Contains(key) || _touched.Contains(key) || _pad.Contains(key)
-        || (key == Key.Turbo && _alwaysRun);
+        || (key == Key.Turbo && (_alwaysRun || CapsRuns));
+
+    /// <summary>"Always run" is Caps Lock's and the lock is on.</summary>
+    private bool CapsRuns =>
+        _capsLock == Lock.On && _keys.GetValueOrDefault(SDL_Scancode.SDL_SCANCODE_CAPSLOCK) == Key.AlwaysRun;
 
     /// <summary>Turbo stays on, or no longer ("always run" pressed in play).</summary>
     public void ToggleRun() => _alwaysRun = !_alwaysRun;
+
+    /// <summary>Caps Lock's state this frame (the window's keyboard).</summary>
+    internal void LockCaps(Lock state) => _capsLock = state;
 
     /// <summary>Holds or releases a key from the program (automated tests).</summary>
     public void Hold(Key key, State state)
@@ -478,6 +489,12 @@ public sealed class Input
 
         SetFlyKey(scancode, state);
         if (!_keys.TryGetValue(scancode, out var key))
+        {
+            return;
+        }
+
+        // Caps Lock's "always run" follows the lock (LockCaps): its presses don't toggle.
+        if (key == Key.AlwaysRun && scancode == SDL_Scancode.SDL_SCANCODE_CAPSLOCK)
         {
             return;
         }

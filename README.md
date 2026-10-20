@@ -289,7 +289,7 @@ Display: 3440x1440 @ 144 Hz, window 1280x960 (windowed), render target 1280x960,
 ```
 
 Controls: W/S or Up/Down to run, A/D to strafe, the mouse or Left/Right to turn, Space to jump
-(hold it while falling to open the chute; running into a ledge while falling grabs it), Shift for turbo (Caps Lock keeps it on until pressed again), Ctrl or the left mouse button to fire,
+(hold it while falling to open the chute; running into a ledge while falling grabs it), Shift for turbo (Caps Lock keeps it on while locked; another "always run" key toggles it), Ctrl or the left mouse button to fire,
 Enter or E to use the item, Tab, [ ] or the mouse wheel to select it (or 1-5), the right mouse button for sniper mode
 (the mouse wheel or PageUp/PageDown zoom, Tab or [ ] select the ammo), F1 for the flying camera (E/Q to go up and
 down), F2 for a quick save (the original's full save: the name is asked, the level's number
