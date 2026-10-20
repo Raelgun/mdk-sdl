@@ -209,6 +209,7 @@ jump, fall, chute, hang from a ledge, slide, sniper mode, knocked down. Each fra
 - reads the input and accelerates or brakes him (turbo doubles the speed);
 - sweeps his box through the BSP;
 - lands him on floors or on objects flagged as platforms, which carry him along.
+  Some platforms (flag 0x800000) keep him: he moves with them through walls and can't walk off.
 - lifts him in a fan's updraft: his arena's fans, else the second arena's (a corridor's shaft fan
   lifts him on into the arena above).
 

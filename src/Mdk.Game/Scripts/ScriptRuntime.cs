@@ -343,6 +343,7 @@ public sealed partial class ScriptRuntime
             GroupFacets = GroupFacets,
         };
         kurt.Updraft = (vz, dt) => KurtUpdraft(kurt.Feet, vz, dt);
+        kurt.Keeper = KeeperAt;
         Level = level;
         Cmi = cmi;
         Mixer = mixer;
@@ -2223,6 +2224,10 @@ public sealed partial class ScriptRuntime
         var (colour, range) = SparkColours[(int)Spark.Fire];
         Debris.Spark(arena, point, 1, SparkSize, colour, range, 1f, Debris.Launch.Still);
     }
+
+    /// <summary>Where a platform that keeps Kurt is (flag 0x800000), or null.</summary>
+    private static Vector3? KeeperAt(object owner) =>
+        owner is MdkObject { Dead: false } obj && (obj.Flags & MdkObject.FlagStandable) != 0 ? obj.Position : null;
 
     /// <summary>Kurt's updraft (damp_gravity 0x469efc): his arena's fans, else the second arena's.
     /// E.g. LEVEL3's CHMO_6 shaft fan lifts him on through the floor doorway into HMO_8.</summary>

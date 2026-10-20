@@ -168,6 +168,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
             // No knock-down, chute or ledges while riding.
             KnockDamage = 0f;
             StopChuteSound();
+            _keeper = null;
             Ride(input, delta);
             return;
         }
@@ -199,11 +200,12 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
         }
 
         UpdateTurning(input, turbo, delta);
+        CheckKeeper();
 
-        // Throwing or knocked down, he doesn't walk.
+        // Throwing, knocked down or kept by a platform, he doesn't walk.
         var forward = Axis(input, Key.Forward, Key.Back);
         var strafe = Walking == Walk.Riding ? 0f : Axis(input, Key.StrafeRight, Key.StrafeLeft);
-        if (Current is State.Throw or State.Knocked or State.GetUp)
+        if (Current is State.Throw or State.Knocked or State.GetUp || Kept)
         {
             forward = 0f;
             strafe = 0f;
@@ -230,6 +232,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
         }
 
         UpdateVertical(input, move, delta);
+        StayOnKeeper();
         UpdateTouched();
         if (Current == State.HardLand || GrabLedge(before, forward))
         {
@@ -248,6 +251,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
         // The chute closes silently.
         ChuteOpen = false;
         StopChuteSound();
+        _keeper = null;
         Feet = feet;
         Yaw = yaw;
         ForwardSpeed = 0f;
@@ -503,7 +507,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
     {
         var before = Feet;
         var dz = VerticalSpeed * delta;
-        var platform = FindPlatform(dz);
+        var platform = KeptPlatform(dz) ?? FindPlatform(dz);
         if (platform is { } below)
         {
             dz = below.Top + PlatformLift - Feet.Z;
@@ -516,6 +520,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
         {
             Feet = Feet with { Z = on.Top };
             Platform = on.Owner;
+            KeepOn(on.Owner);
             Land(before, Vector3.UnitZ, delta);
             return;
         }
