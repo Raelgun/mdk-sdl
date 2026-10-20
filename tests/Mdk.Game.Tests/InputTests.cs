@@ -146,4 +146,37 @@ public class InputTests
         Assert.Equal(2f, input.MouseX, 3);
         Assert.Equal(-2f, input.MouseY, 3);
     }
+
+    [Fact]
+    public void CapsLockKeepsTurboOn()
+    {
+        // The original's Caps Lock: turbo follows the lock (its light), not the key's presses
+        // (macOS sends a press when it locks, a release when it unlocks).
+        var input = NewInput();
+        input.SetKey(SDL_Scancode.SDL_SCANCODE_CAPSLOCK, Input.State.Down, Repeat.No);
+        Assert.False(input.WasPressed(Key.AlwaysRun));
+        Assert.Equal("CapsLock", input.Describe(Key.AlwaysRun));
+
+        input.LockCaps(Input.Lock.On);
+        Assert.True(input.IsDown(Key.Turbo));
+
+        input.LockCaps(Input.Lock.Off);
+        Assert.False(input.IsDown(Key.Turbo));
+    }
+
+    [Fact]
+    public void AnotherAlwaysRunKeyToggles()
+    {
+        // Bound elsewhere, "always run" toggles on presses and the lock is ignored.
+        var input = NewInput();
+        Assert.True(input.Bind(Key.AlwaysRun, "F"));
+        input.LockCaps(Input.Lock.On);
+        Assert.False(input.IsDown(Key.Turbo));
+
+        input.SetKey(SDL_Scancode.SDL_SCANCODE_F, Input.State.Down, Repeat.No);
+        Assert.True(input.WasPressed(Key.AlwaysRun));
+
+        input.ToggleRun();
+        Assert.True(input.IsDown(Key.Turbo));
+    }
 }

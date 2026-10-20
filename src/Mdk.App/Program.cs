@@ -11,7 +11,7 @@ using Mdk.Game.Scripts;
 
 // MDK in C# and SDL3: the splash, the main menu, then the levels in the order 7, 6, 3, 4, 8, 5 with
 // their loading screens, briefings, statistics and saves. In a level: WASD/arrows, mouse, Space
-// jumps, Shift runs, Ctrl or the left mouse button fires, Enter uses the item, Tab/[/] and 1-5
+// jumps, Shift runs (Caps Lock: always), Ctrl or the left mouse button fires, Enter uses the item, Tab/[/] and 1-5
 // select it, the right mouse button toggles sniper mode (wheel or PageUp/PageDown zoom, Tab/[/]
 // select the ammo), F1 flying camera with E/Q up and down, F12 screenshot, Esc the pause menu,
 // F2 quick save (names the save), F9 quick load, F3 the debug overlay, the key left of 1 the console.
