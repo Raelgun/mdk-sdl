@@ -15,11 +15,19 @@ public class CameraTests
     private const float ArenaPitch = 4f;
     /// <summary>The rise per tick is clamped to 0.5: the term tops out at −20°.</summary>
     private const float MaxClimbPitch = -20f;
+    /// <summary>Mouse motion per step far past the camera's pitch limits.</summary>
+    private const float FullLook = 1000f;
+    /// <summary>The view's least share along Kurt's facing: about 1° short of straight down.</summary>
+    private const float MinAhead = 0.01f;
 
     private static readonly AudioDevice Device = new(Output.Muted);
 
     /// <summary>Kurt standing on a floor that rises <paramref name="risePerTick"/> each tick.</summary>
-    private static float PitchAfter(float risePerTick, float seconds)
+    private static float PitchAfter(float risePerTick, float seconds) => CameraAfter(risePerTick, seconds).Pitch;
+
+    /// <summary>The camera, and its pitch, after Kurt's floor rose and the mouse moved down
+    /// <paramref name="mouseDown"/> each step.</summary>
+    private static (FollowCamera Camera, Kurt.Kurt Kurt, float Pitch) CameraAfter(float risePerTick, float seconds, float mouseDown = 0f)
     {
         var kurt = new Kurt.Kurt(new ArenaSpace(), new SoundMixer(Device, _ => null), _ => 1) { OnFloor = true };
         var camera = new FollowCamera();
@@ -27,11 +35,13 @@ public class CameraTests
         for (var t = 0f; t < seconds; t += Step)
         {
             kurt.Feet += new Vector3(0f, 0f, risePerTick * Kurt.Kurt.Ticks * Step);
+            input.ClearMouse();
+            input.AddMouseMotion(0f, mouseDown);
             camera.Update(kurt, ArenaPitch, input, Step);
         }
 
         // Positive pitch looks down.
-        return -float.RadiansToDegrees(MathF.Asin(camera.Forward.Z));
+        return (camera, kurt, -float.RadiansToDegrees(MathF.Asin(camera.Forward.Z)));
     }
 
     [Fact]
@@ -52,5 +62,18 @@ public class CameraTests
     {
         var pitch = PitchAfter(-0.25f, 5f);
         Assert.InRange(pitch, ArenaPitch + 9f, ArenaPitch + 10.5f);
+    }
+
+    [Theory]
+    [InlineData(0f, FullLook)]
+    [InlineData(0f, -FullLook)]
+    [InlineData(-0.25f, FullLook)]
+    public void LookingFullyUpOrDownStaysUpright(float risePerTick, float mouseDown)
+    {
+        // The mouse pushed past the limit (and falling tilting further down) never turns the view
+        // over: it still looks a little the way Kurt faces (issue #11).
+        var (camera, kurt, _) = CameraAfter(risePerTick, 3f, mouseDown);
+        var ahead = Vector3.Dot(camera.Forward, kurt.Facing);
+        Assert.True(ahead > MinAhead, $"forward {camera.Forward}, facing {kurt.Facing}");
     }
 }

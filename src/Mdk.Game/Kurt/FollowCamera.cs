@@ -23,6 +23,8 @@ public sealed class FollowCamera(ArenaSpace? space = null)
     private const float MouseDegrees = 0.15f;
     private const float MinPitch = -60f;
     private const float MaxPitch = 90f;
+    /// <summary>The view's pitch stays short of straight up or down: past it the view turns over.</summary>
+    private const float ViewPitchLimit = 89f;
     private const float AirPitchRate = 0.667f * Kurt.Ticks;
     private const float AirPitchMax = 40f;
     private const float AirPitchDecay = 40f;
@@ -118,7 +120,8 @@ public sealed class FollowCamera(ArenaSpace? space = null)
         }
 
         _lookOffset = Math.Clamp(_lookOffset, MinPitch - _arenaPitch - _airPitch, MaxPitch - _arenaPitch - _airPitch);
-        var pitch = float.DegreesToRadians(_arenaPitch + _lookOffset + _airPitch - ClimbPitch * _climb + kurt.CameraTilt);
+        var degrees = _arenaPitch + _lookOffset + _airPitch - ClimbPitch * _climb + kurt.CameraTilt;
+        var pitch = float.DegreesToRadians(Math.Clamp(degrees, -ViewPitchLimit, ViewPitchLimit));
         var facing = kurt.Facing;
         Position = Point(kurt.Feet, facing, pitch, kurt.CameraPivot);
         if (space != null && !kurt.Sniping && !kurt.Frozen && kurt.Current != Kurt.State.Dead)
