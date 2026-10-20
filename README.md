@@ -241,7 +241,8 @@ mdk_sdl.exe
   as `Soak problem` (`--tour`: every arena in turn during `--wait`, doors shut before each teleport).
   `--press=QuickSave@1,Menu.Accept@1.5`: presses game keys, or menu keys after `Menu.`, once at
   those times. `--frames=dir,count[,every]`: after `--wait`, saves every Nth frame of a level or
-  of the fall (4: 15 a second) as `frame000.bmp`..., then quits (the animation above). For videos:
+  of the fall (4: 15 a second) as `frame000.bmp`..., then quits (the animation above). `--fps=N`:
+  test frames a second instead of 60; above 60 they are drawn between the steps (240: 4 a step). For videos:
   `--size=2560x1440` sets the hidden frame's size (1280x960 by default), `--record-audio=file.wav`
   saves the sound from the start (with `--mute`, in step with the frames).
 

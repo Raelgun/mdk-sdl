@@ -75,6 +75,17 @@ public sealed class FrameBlend(Blending blending)
         return obj == _driven ? obj.Transform * Matrix4x4.CreateTranslation(_lag) : obj.TransformAt(_tick);
     }
 
+    /// <summary>An object's place as drawn (tests' traces).</summary>
+    public Vector3 PositionOf(MdkObject obj)
+    {
+        if (blending == Blending.Off)
+        {
+            return obj.Position;
+        }
+
+        return obj == _driven ? obj.Position + _lag : obj.PositionAt(_tick);
+    }
+
     /// <summary>Kurt between two steps; on the same carrier, his place and yaw on it.</summary>
     private static (Vector3 Feet, float Yaw) KurtAt(Pose from, Pose to, float step, float tick)
     {

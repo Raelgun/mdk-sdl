@@ -75,6 +75,8 @@ public sealed record ViewerOptions(int Level, Vector3? Position, float? Yaw, flo
     public string? Console { get; init; }
     /// <summary>After the wait: frames saved, then the game quits (--frames).</summary>
     public FrameDump? Frames { get; init; }
+    /// <summary>Test frames a second (--fps): above 60, frames are drawn between the steps.</summary>
+    public int? FrameRate { get; init; }
 }
 
 /// <summary>A roll of the 1996 demo's levels.</summary>
@@ -145,6 +147,7 @@ public sealed class Viewer : IScreen
     private readonly bool _test;
     /// <summary>Frames between the steps (not the tests': their frames are steps).</summary>
     private readonly FrameBlend _blend;
+    private readonly Blending _blending;
     private bool _flying;
     private float _time;
     private float _pending;
@@ -275,7 +278,8 @@ public sealed class Viewer : IScreen
         }
 
         _test = options.Screenshot != null || options.Frames != null;
-        _blend = new FrameBlend(_test ? Blending.Off : Blending.On);
+        _blending = _test && options.FrameRate == null ? Blending.Off : Blending.On;
+        _blend = new FrameBlend(_blending);
         ui.Window.CaptureMouse(_test ? Capture.Off : Capture.On);
         _commands = new LevelCommands(level, _kurt, _scripts, _space, SaveSlot) { Mods = _mods };
 
@@ -602,7 +606,7 @@ public sealed class Viewer : IScreen
         var step = _pending / Step;
         var tick = _scripts.TickBlend(_pending);
         _blend.Update(_kurt, step, tick);
-        if (_test || _flying)
+        if (_blending == Blending.Off || _flying)
         {
             return;
         }
@@ -1025,10 +1029,11 @@ public sealed class Viewer : IScreen
     private void Trace(Vector3 camera)
     {
         var carrier = _scripts.Rides.Ridden ?? _kurt.Platform as MdkObject;
+        var at = carrier is { } drawn ? _blend.PositionOf(drawn) : Vector3.Zero;
         var on = carrier is { } c
-            ? string.Create(CultureInfo.InvariantCulture, $" on {c.TypeName} {c.Position.X:0.00} {c.Position.Y:0.00} {c.Position.Z:0.00}")
+            ? string.Create(CultureInfo.InvariantCulture, $" on {c.TypeName} {at.X:0.00} {at.Y:0.00} {at.Z:0.00}")
             : "";
-        var f = _kurt.Feet;
+        var f = _blend.Feet;
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"trace {_time:0.000} kurt {f.X:0.00} {f.Y:0.00} {f.Z:0.00} camera {camera.X:0.00} {camera.Y:0.00} {camera.Z:0.00}{on}"));
     }
