@@ -118,6 +118,13 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
     private int _jumpTicksLeft;
     private bool _jumpReleased = true;
 
+    /// <summary>How the last step turned Kurt by the mouse: a frame turns him so at once.</summary>
+    private enum MouseTurn { None, Walk, Scope }
+    private MouseTurn _mouseTurn;
+
+    /// <summary>Counts the teleports: a frame draws him where he is, not on the way there.</summary>
+    public int Teleports { get; private set; }
+
     public Vector3 Facing => new(MathF.Cos(float.DegreesToRadians(Yaw)), MathF.Sin(float.DegreesToRadians(Yaw)), 0f);
 
     public Vector3 Right => new(Facing.Y, -Facing.X, 0f);
@@ -128,6 +135,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
     /// <summary>One step of <paramref name="delta"/> seconds.</summary>
     public void Update(Input input, float delta)
     {
+        _mouseTurn = MouseTurn.None;
         Invulnerable = MathF.Max(Invulnerable - delta, 0f);
         ChuteClosing = false;
         if (Frozen)
@@ -245,6 +253,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
         ForwardSpeed = 0f;
         StrafeSpeed = 0f;
         VerticalSpeed = 0f;
+        Teleports++;
     }
 
     /// <summary>Moves Kurt by <paramref name="offset"/> (horizontal) with collision, sliding along
@@ -318,6 +327,31 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
         }
 
         Yaw += TurnRate * delta - input.MouseX * MouseDegrees;
+        _mouseTurn = MouseTurn.Walk;
+    }
+
+    /// <summary>A frame's mouse turn (and the scope's tilt), at once rather than with the next step
+    /// (screens above 60 Hz), where the last step turned him by the mouse. Returns the yaw change
+    /// in degrees.</summary>
+    public float MouseLook(Input input)
+    {
+        if (_mouseTurn == MouseTurn.Walk)
+        {
+            var turn = -input.TakeMouseX() * MouseDegrees;
+            Yaw += turn;
+            return turn;
+        }
+
+        if (_mouseTurn != MouseTurn.Scope)
+        {
+            return 0f;
+        }
+
+        // The mouse's share of the scope's look: no keys, no time.
+        var mouse = new Vector2(input.TakeMouseX(), input.TakeMouseY()) * MouseDegrees;
+        var scope = Scope.Look(0f, 0f, mouse, Scope.Turbo.Off, 0f);
+        Yaw += scope;
+        return scope;
     }
 
     /// <summary>Towards <c>input × max speed</c>, or friction without input (vel_accel,

@@ -379,12 +379,21 @@ public sealed partial class ScriptRuntime
         while (_time >= Tick)
         {
             _time -= Tick;
+            foreach (var obj in Objects)
+            {
+                obj.Remember();
+            }
+
             RunTick();
             _tickCount++;
         }
 
         Rides.Follow();
     }
+
+    /// <summary>How far a frame <paramref name="ahead"/> seconds after the last step is from the
+    /// last tick to the next (0-1).</summary>
+    public float TickBlend(float ahead) => Math.Clamp((_time + ahead) / Tick, 0f, 1f);
 
     public ArenaState GetArenaState(string arena)
     {

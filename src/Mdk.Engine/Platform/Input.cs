@@ -425,6 +425,22 @@ public sealed class Input
         _wheel.Clear();
     }
 
+    /// <summary>The horizontal or vertical mouse motion, used at once (a frame's look): the next
+    /// game step sees none.</summary>
+    public float TakeMouseX()
+    {
+        var x = MouseX;
+        MouseX = 0f;
+        return x;
+    }
+
+    public float TakeMouseY()
+    {
+        var y = MouseY;
+        MouseY = 0f;
+        return y;
+    }
+
     /// <summary>Someone else has this frame's input (the console): the game sees no presses, typing,
     /// clicks or mouse, and no keyboard or mouse keys held. Keys held by the program (tests) stay.</summary>
     public void Withhold()

@@ -143,6 +143,7 @@ public sealed partial class Kurt
         var tilt = Axis(input, Key.Back, Key.Forward);
         var mouse = new Vector2(input.MouseX, input.MouseY) * MouseDegrees;
         Yaw += Scope.Look(turn, tilt, mouse, turbo ? Scope.Turbo.On : Scope.Turbo.Off, delta);
+        _mouseTurn = MouseTurn.Scope;
 
         Scope.Wheel(input.Wheel);
         var zooming = Scope.UpdateZoom(Axis(input, Key.ZoomOut, Key.ZoomIn), delta);
