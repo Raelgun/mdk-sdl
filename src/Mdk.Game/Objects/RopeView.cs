@@ -29,16 +29,23 @@ public sealed class RopeView(Renderer renderer, LevelData level)
     private readonly List<Vertex> _vertices = [];
     private readonly List<(int First, int Count, Material Material)> _draws = [];
 
+    /// <summary>The steps' frames: ropes where the tick left them.</summary>
+    private static readonly FrameBlend Steps = new(Blending.Off);
+
     /// <summary>The line ends of an object's ropes, two points each.</summary>
-    public static List<Vector3> LinesOf(MdkObject obj)
+    public static List<Vector3> LinesOf(MdkObject obj) => LinesOf(obj, Steps);
+
+    /// <summary>The line ends as <paramref name="blend"/>'s frame draws them: the ends on the
+    /// object move with it.</summary>
+    public static List<Vector3> LinesOf(MdkObject obj, FrameBlend blend)
     {
         var lines = new List<Vector3>();
-        AddLines(obj, lines);
+        AddLines(obj, blend, lines);
         return lines;
     }
 
     /// <summary><see cref="LinesOf"/> added to <paramref name="lines"/>.</summary>
-    private static void AddLines(MdkObject obj, List<Vector3> lines)
+    private static void AddLines(MdkObject obj, FrameBlend blend, List<Vector3> lines)
     {
         if (obj.RopeMask == AllLines)
         {
@@ -46,7 +53,7 @@ public sealed class RopeView(Renderer renderer, LevelData level)
             {
                 if (obj.RopePoints[i] != Vector3.Zero)
                 {
-                    lines.Add(obj.ReferencePoint(i + 1));
+                    lines.Add(blend.Carried(obj, obj.ReferencePoint(i + 1)));
                     lines.Add(obj.RopePoints[i]);
                 }
             }
@@ -58,7 +65,7 @@ public sealed class RopeView(Renderer renderer, LevelData level)
         {
             if ((obj.RopeMask & (1 << i)) != 0)
             {
-                lines.Add(obj.RopePoints[i * 2] + Vector3.UnitZ * PairLift);
+                lines.Add(blend.Carried(obj, obj.RopePoints[i * 2]) + Vector3.UnitZ * PairLift);
                 lines.Add(obj.RopePoints[i * 2 + 1]);
             }
         }
@@ -67,8 +74,8 @@ public sealed class RopeView(Renderer renderer, LevelData level)
     /// <summary>An object's line ends (kept: no list per frame).</summary>
     private readonly List<Vector3> _lines = [];
 
-    /// <summary>Queues the ropes of the drawn objects.</summary>
-    public void Draw(List<MdkObject> objects)
+    /// <summary>Queues the ropes of the drawn objects, as <paramref name="blend"/>'s frame draws them.</summary>
+    public void Draw(List<MdkObject> objects, FrameBlend blend)
     {
         _vertices.Clear();
         _draws.Clear();
@@ -81,7 +88,7 @@ public sealed class RopeView(Renderer renderer, LevelData level)
 
             var lines = _lines;
             lines.Clear();
-            AddLines(obj, lines);
+            AddLines(obj, blend, lines);
             if (lines.Count == 0 || _vertices.Count + lines.Count > MaxVertices)
             {
                 continue;

@@ -98,6 +98,18 @@ public sealed class FrameBlend(Blending blending)
         return obj == _driven ? obj.Position + _lag : obj.PositionAt(_tick);
     }
 
+    /// <summary>Where a frame draws a point moving with an object (a rope's end on it).</summary>
+    public Vector3 Carried(MdkObject obj, Vector3 point)
+    {
+        if (blending == Blending.Off)
+        {
+            return point;
+        }
+
+        var turn = obj == _driven ? 0f : obj.YawAt(_tick) - obj.Yaw;
+        return PositionOf(obj) + Vector3.Transform(point - obj.Position, Matrix4x4.CreateRotationZ(float.DegreesToRadians(turn)));
+    }
+
     /// <summary>Kurt between two steps; on a carrier at either (landing, leaving, or his fall
     /// missing it a step), his place and yaw on it: it moves at ticks, he at steps.</summary>
     private static (Vector3 Feet, float Yaw) KurtAt(Pose from, Pose to, float step, float tick)

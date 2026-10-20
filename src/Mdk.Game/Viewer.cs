@@ -702,7 +702,7 @@ public sealed class Viewer : IScreen
         _view.Draw(_scripts.DrawnArenas, _scripts.AnimatedTextures);
         _view.DrawEnd(_scripts.EndLevel);
         DrawObjects(_objects, _scripts, _level, _looks, _blend);
-        _ropes.Draw(_scripts.Objects);
+        _ropes.Draw(_scripts.Objects, _blend);
         _sniper.Draw(_kurt, _scripts, elapsed);
         _effects.Draw(_scripts, camera);
         _sprite.Draw(_kurt, _blend.Feet, camera.Position, eye.Forward, eye.Up, eye.FieldOfView, _space);
