@@ -247,7 +247,8 @@ mdk_sdl.exe
 
 Settings (the options below, the mods' switches) and saved games
 are kept next to the executable (`settings.cfg`, `saves/*.sav`; `MDK_USER_DIR` overrides the
-folder). The first run copies them from where older builds kept them (`%LOCALAPPDATA%/mdk-sdl`). `LASTGAME` (written when Kurt dies) is deleted at start, as in the original.
+folder). If that folder can't be written (Program Files, a protected Steam or GOG folder), they go to
+`%APPDATA%\mdk-sdl` (Linux `~/.local/share/mdk-sdl`), mods too. The first run copies them from where older builds kept them (`%LOCALAPPDATA%/mdk-sdl`). `LASTGAME` (written when Kurt dies) is deleted at start, as in the original.
 
 ### Options
 

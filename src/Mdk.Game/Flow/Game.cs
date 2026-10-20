@@ -612,8 +612,6 @@ public sealed class Game : IDisposable
         return 0;
     }
 
-    /// <summary>Settings and saves live next to the executable (a portable install). The first run
-    /// moves over what an older build kept in the local data folder.</summary>
     /// <summary>--mod: only these mods on (unknown ones named).</summary>
     private void UseOnly(IReadOnlyList<string> mods)
     {
@@ -625,9 +623,17 @@ public sealed class Game : IDisposable
         _ui.Mods.Only(_ui.Settings, mods);
     }
 
+    /// <summary>Settings and saves live next to the executable (a portable install), or in the
+    /// user's data folder when it's protected (<see cref="UserFolders"/>). The first portable run
+    /// moves over what an older build kept in the local data folder.</summary>
     private static string UserFolder()
     {
-        var folder = AppContext.BaseDirectory;
+        var folder = UserFolders.Choose(AppContext.BaseDirectory, UserFolders.Personal());
+        if (folder != AppContext.BaseDirectory)
+        {
+            return folder;
+        }
+
         var old = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), UserFolderName);
         if (File.Exists(Settings.PathIn(folder)) || !File.Exists(Settings.PathIn(old)))
         {
