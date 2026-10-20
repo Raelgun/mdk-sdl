@@ -516,7 +516,7 @@ public sealed class Viewer : IScreen
             // camera); before, it lagged a step behind on each tick: a ghost.
             UpdateCamera(input);
             input.ClearMouse();
-            _blend.Record(_kurt, Carrier(), Driven());
+            _blend.Record(_kurt, Carrier(), Driven(), _scripts.TickCount);
 
             // The music follows Kurt's arena, which the scripts set (BSPShow).
             using (_ui.Dev.Profiler.Measure(Section.Audio))

@@ -20,12 +20,16 @@ public sealed class FrameBlend(Blending blending)
     /// <summary>Moving faster than this (u/s; the lift: 750) is a jump.</summary>
     public const float MaxSpeed = 1500f;
 
-    /// <summary>Kurt after a step, and what carries him there (its place and yaw).</summary>
-    private readonly record struct Pose(Vector3 Feet, float Yaw, int Teleports, MdkObject? Carrier, Vector3 CarrierAt, float CarrierYaw);
+    /// <summary>Kurt after a step, and what carries him there (its place and yaw, now and a step
+    /// before).</summary>
+    private readonly record struct Pose(Vector3 Feet, float Yaw, int Teleports, MdkObject? Carrier, Vector3 CarrierAt, float CarrierYaw,
+        Vector3 CarrierWas, float CarrierYawWas);
 
     private Pose? _previous;
     private Pose _current;
     private float _tick = 1f;
+    /// <summary>The scripts' tick count at the last step.</summary>
+    private int _ticks;
     /// <summary>What Kurt rides that follows him (drawn moved with him).</summary>
     private MdkObject? _driven;
     private Vector3 _lag;
@@ -34,10 +38,15 @@ public sealed class FrameBlend(Blending blending)
     public Vector3 Feet { get; private set; }
     public float Yaw { get; private set; }
 
-    /// <summary>Kurt after a step: on or in <paramref name="carrier"/>, riding <paramref name="driven"/>.</summary>
-    public void Record(Kurt.Kurt kurt, MdkObject? carrier, MdkObject? driven)
+    /// <summary>Kurt after a step: on or in <paramref name="carrier"/>, riding <paramref name="driven"/>,
+    /// the scripts at <paramref name="tick"/>.</summary>
+    public void Record(Kurt.Kurt kurt, MdkObject? carrier, MdkObject? driven, int tick)
     {
-        var now = new Pose(kurt.Feet, kurt.Yaw, kurt.Teleports, carrier, carrier?.Position ?? Vector3.Zero, carrier?.Yaw ?? 0f);
+        // The carrier a step ago: before this step's tick if one ran (objects move at ticks).
+        var was = tick != _ticks ? 0f : 1f;
+        _ticks = tick;
+        var now = new Pose(kurt.Feet, kurt.Yaw, kurt.Teleports, carrier, carrier?.Position ?? Vector3.Zero, carrier?.Yaw ?? 0f,
+            carrier?.PositionAt(was) ?? Vector3.Zero, carrier?.YawAt(was) ?? 0f);
         _previous = _previous == null || now.Teleports != _current.Teleports ? now : _current;
         _current = now;
         _driven = driven;
@@ -86,17 +95,21 @@ public sealed class FrameBlend(Blending blending)
         return obj == _driven ? obj.Position + _lag : obj.PositionAt(_tick);
     }
 
-    /// <summary>Kurt between two steps; on the same carrier, his place and yaw on it.</summary>
+    /// <summary>Kurt between two steps; on a carrier at either (landing, leaving, or his fall
+    /// missing it a step), his place and yaw on it: it moves at ticks, he at steps.</summary>
     private static (Vector3 Feet, float Yaw) KurtAt(Pose from, Pose to, float step, float tick)
     {
-        if (to.Carrier is not { } carrier || from.Carrier != carrier)
+        if ((to.Carrier ?? from.Carrier) is not { } carrier)
         {
             return Jumped(from.Feet, to.Feet, Viewer.Step) ? (to.Feet, to.Yaw) : (Lerp(from.Feet, to.Feet, step), LerpAngle(from.Yaw, to.Yaw, step));
         }
 
-        var (near, far) = (from.Feet - from.CarrierAt, to.Feet - to.CarrierAt);
+        var (near, nearYaw) = from.Carrier == carrier ? (from.Feet - from.CarrierAt, from.Yaw - from.CarrierYaw)
+            : (from.Feet - to.CarrierWas, from.Yaw - to.CarrierYawWas);
+        var (far, farYaw) = to.Carrier == carrier ? (to.Feet - to.CarrierAt, to.Yaw - to.CarrierYaw)
+            : (to.Feet - carrier.Position, to.Yaw - carrier.Yaw);
         var on = Jumped(near, far, Viewer.Step) ? far : Lerp(near, far, step);
-        var turned = LerpAngle(from.Yaw - from.CarrierYaw, to.Yaw - to.CarrierYaw, step);
+        var turned = LerpAngle(nearYaw, farYaw, step);
         return (carrier.PositionAt(tick) + on, carrier.YawAt(tick) + turned);
     }
 

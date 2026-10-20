@@ -15,6 +15,8 @@ public class FrameBlendTests
     private const float Step = Viewer.Step;
     private const float Half = 0.5f;
     private const float Precision = 4;
+    /// <summary>LEVEL6's lift moves this much a tick at full speed.</summary>
+    private const float LiftMove = 25f;
 
     private static readonly AudioDevice Device = new(Output.Muted);
 
@@ -49,10 +51,10 @@ public class FrameBlendTests
     {
         var kurt = NewKurt();
         var blend = new FrameBlend(Blending.On);
-        blend.Record(kurt, null, null);
+        blend.Record(kurt, null, null, 0);
         kurt.Feet = new Vector3(1f, 0f, 0f);
         kurt.Yaw = 10f;
-        blend.Record(kurt, null, null);
+        blend.Record(kurt, null, null, 0);
 
         blend.Update(kurt, Half, 1f);
         Assert.Equal(new Vector3(Half, 0f, 0f), blend.Feet);
@@ -67,9 +69,9 @@ public class FrameBlendTests
     {
         var kurt = NewKurt();
         var blend = new FrameBlend(Blending.On);
-        blend.Record(kurt, null, null);
+        blend.Record(kurt, null, null, 0);
         kurt.Teleport(new Vector3(2f, 0f, 0f), 0f);
-        blend.Record(kurt, null, null);
+        blend.Record(kurt, null, null, 0);
 
         blend.Update(kurt, Half, 1f);
         Assert.Equal(kurt.Feet, blend.Feet);
@@ -80,9 +82,9 @@ public class FrameBlendTests
     {
         var kurt = NewKurt();
         var blend = new FrameBlend(Blending.Off);
-        blend.Record(kurt, null, null);
+        blend.Record(kurt, null, null, 0);
         kurt.Feet = new Vector3(1f, 0f, 0f);
-        blend.Record(kurt, null, null);
+        blend.Record(kurt, null, null, 0);
 
         blend.Update(kurt, Half, Half);
         var obj = new MdkObject { Position = new Vector3(3f, 0f, 0f) };
@@ -117,14 +119,40 @@ public class FrameBlendTests
         var kurt = NewKurt();
         var lift = new MdkObject { Arena = "A" };
         var blend = new FrameBlend(Blending.On);
-        blend.Record(kurt, lift, null);
+        blend.Record(kurt, lift, null, 0);
         lift.Remember();
         lift.Position = new Vector3(0f, 0f, 10f);
         kurt.Feet = lift.Position;
-        blend.Record(kurt, lift, null);
+        blend.Record(kurt, lift, null, 1);
 
         blend.Update(kurt, Half, Half / 2f);
         Assert.Equal(lift.PositionAt(Half / 2f), blend.Feet);
+    }
+
+    [Fact]
+    public void KurtLandingOnALiftIsDrawnOnIt()
+    {
+        // LEVEL6's lift (25 a tick): Kurt falls onto it as it moves; the step he lands on it
+        // starts where the last frame drew him, not 25 further (--fps=240 --trace: a jitter).
+        var kurt = NewKurt();
+        kurt.Feet = new Vector3(0f, 0f, 2f);
+        var lift = new MdkObject { Arena = "A" };
+        var blend = new FrameBlend(Blending.On);
+        blend.Record(kurt, null, null, 0);
+        blend.Record(kurt, null, null, 0);
+
+        lift.Remember();
+        lift.Position = new Vector3(0f, -LiftMove, 0f);
+        kurt.Feet = lift.Position;
+        blend.Record(kurt, lift, null, 1);
+        blend.Update(kurt, 0f, 0f);
+        Assert.Equal(new Vector3(0f, 0f, 2f), blend.Feet);
+
+        // A step without a tick where he isn't on it (his fall finds it a step later): still
+        // drawn with it.
+        blend.Record(kurt, null, null, 1);
+        blend.Update(kurt, Half, Half);
+        Assert.Equal(lift.PositionAt(Half), blend.Feet);
     }
 
     [Fact]
