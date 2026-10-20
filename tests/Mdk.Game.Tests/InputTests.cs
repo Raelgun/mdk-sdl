@@ -146,4 +146,21 @@ public class InputTests
         Assert.Equal(2f, input.MouseX, 3);
         Assert.Equal(-2f, input.MouseY, 3);
     }
+
+    [Fact]
+    public void CapsLockKeepsTurboOn()
+    {
+        // The original's Caps Lock: turbo stays on until "always run" is pressed again.
+        var input = NewInput();
+        input.SetKey(SDL_Scancode.SDL_SCANCODE_CAPSLOCK, Input.State.Down, Repeat.No);
+        Assert.True(input.WasPressed(Key.AlwaysRun));
+        Assert.Equal("CapsLock", input.Describe(Key.AlwaysRun));
+
+        input.ToggleRun();
+        input.SetKey(SDL_Scancode.SDL_SCANCODE_CAPSLOCK, Input.State.Up, Repeat.No);
+        Assert.True(input.IsDown(Key.Turbo));
+
+        input.ToggleRun();
+        Assert.False(input.IsDown(Key.Turbo));
+    }
 }

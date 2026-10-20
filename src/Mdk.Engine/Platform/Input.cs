@@ -20,6 +20,8 @@ public enum Key
     RollLeft, RollRight, Teleport,
     /// <summary>The level's full save (the original's F2), and loading the latest save.</summary>
     QuickSave, QuickLoad,
+    /// <summary>Turbo on until pressed again (the original's Caps Lock).</summary>
+    AlwaysRun,
 }
 
 /// <summary>Keys of the menus and prompts: fixed, whatever the game's bindings.</summary>
@@ -51,6 +53,7 @@ public sealed class Input
         [SDL_Scancode.SDL_SCANCODE_SPACE] = Key.Jump,
         [SDL_Scancode.SDL_SCANCODE_LSHIFT] = Key.Turbo,
         [SDL_Scancode.SDL_SCANCODE_RSHIFT] = Key.Turbo,
+        [SDL_Scancode.SDL_SCANCODE_CAPSLOCK] = Key.AlwaysRun,
         [SDL_Scancode.SDL_SCANCODE_LCTRL] = Key.Fire,
         [SDL_Scancode.SDL_SCANCODE_RCTRL] = Key.Fire,
         [SDL_Scancode.SDL_SCANCODE_RETURN] = Key.UseItem,
@@ -185,6 +188,8 @@ public sealed class Input
     private readonly Dictionary<PadButton, Key> _padKeys = [];
     /// <summary>The buttons held: a trigger, whose axis reports every move, names itself once a pull.</summary>
     private readonly HashSet<PadButton> _padHeld = [];
+    /// <summary>Turbo is held until "always run" is pressed again (<see cref="ToggleRun"/>).</summary>
+    private bool _alwaysRun;
 
     /// <summary>The game's degrees a mouse count turns (Kurt, the cameras): the gamepad's and the
     /// gyroscope's look in degrees becomes mouse counts.</summary>
@@ -219,7 +224,11 @@ public sealed class Input
     public int Digit { get; private set; } = NoDigit;
 
     public bool IsDown(Key key) =>
-        _down.Contains(key) || _buttons.Contains(key) || _fly.Contains(key) || _wheel.Contains(key) || _held.Contains(key) || _touched.Contains(key) || _pad.Contains(key);
+        _down.Contains(key) || _buttons.Contains(key) || _fly.Contains(key) || _wheel.Contains(key) || _held.Contains(key) || _touched.Contains(key) || _pad.Contains(key)
+        || (key == Key.Turbo && _alwaysRun);
+
+    /// <summary>Turbo stays on, or no longer ("always run" pressed in play).</summary>
+    public void ToggleRun() => _alwaysRun = !_alwaysRun;
 
     /// <summary>Holds or releases a key from the program (automated tests).</summary>
     public void Hold(Key key, State state)

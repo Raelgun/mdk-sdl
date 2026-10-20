@@ -403,6 +403,11 @@ public sealed class Viewer : IScreen
             return Event.None;
         }
 
+        if (input.WasPressed(Key.AlwaysRun))
+        {
+            input.ToggleRun();
+        }
+
         if (input.WasPressed(Key.Fly))
         {
             _flying = !_flying;
