@@ -172,7 +172,9 @@ public sealed class Scope
         }
         else if (_zoomSpeed < 0f)
         {
-            Zoom = MathF.Max(Zoom / MathF.Pow(1f - _zoomSpeed, ticks), ZoomLimit);
+            // Past a lost lock's limit, the zoom stays: snapping back to it each time the lock
+            // flickers jerks the view (a target at the lock square's edge leaves it zooming in).
+            Zoom = MathF.Max(Zoom / MathF.Pow(1f - _zoomSpeed, ticks), MathF.Min(ZoomLimit, Zoom));
         }
 
         var moving = direction != 0f && (Zoom < 1f || direction < 0f) && (Zoom > ZoomLimit || direction > 0f);
