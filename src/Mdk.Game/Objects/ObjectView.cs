@@ -55,7 +55,10 @@ public sealed class ObjectView(Renderer renderer, MaterialResolver resolver)
     /// <summary>Lays out a model with a look before it's drawn (a level's load).</summary>
     public void Preload(Model model, Look look) => LayoutOf(model, look);
 
-    public void Draw(MdkObject obj, Look look)
+    public void Draw(MdkObject obj, Look look) => Draw(obj, look, obj.Transform);
+
+    /// <summary>Draws an object placed by <paramref name="transform"/> (a frame between ticks).</summary>
+    public void Draw(MdkObject obj, Look look, Matrix4x4 transform)
     {
         if (obj.Model == null || obj.Dead || LayoutOf(obj.Model, look) is not { } layout)
         {
@@ -66,7 +69,6 @@ public sealed class ObjectView(Renderer renderer, MaterialResolver resolver)
         var hidden = obj.HiddenParts;
         var swap = Swaps?.Of(obj.Model);
         swap?.Pose(pose, hidden);
-        var transform = obj.Transform;
         var frame = obj.TextureFrame >= 0 ? obj.TextureFrame : 0;
         var count = Arrange(layout, hidden);
         var glows = obj.EffectFrames > 0 ? Glow.Shines : Glow.Lit;

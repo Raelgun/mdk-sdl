@@ -173,11 +173,12 @@ public sealed class KurtSprite
 
     /// <summary>Queues Kurt's frame for the camera at <paramref name="eye"/> looking along
     /// <paramref name="forward"/> with <paramref name="up"/>, the view <paramref name="fieldOfView"/>
-    /// degrees high; the <paramref name="space"/>'s floors he stands above don't hide him.</summary>
-    public void Draw(Kurt kurt, Vector3 eye, Vector3 forward, Vector3 up, float fieldOfView, ArenaSpace space)
+    /// degrees high, his feet at <paramref name="feet"/> (a frame between steps); the
+    /// <paramref name="space"/>'s floors he stands above don't hide him.</summary>
+    public void Draw(Kurt kurt, Vector3 feet, Vector3 eye, Vector3 forward, Vector3 up, float fieldOfView, ArenaSpace space)
     {
         // World units per sprite pixel at the feet's depth.
-        var depth = Vector3.Dot(kurt.Feet - eye, forward);
+        var depth = Vector3.Dot(feet - eye, forward);
         if (!kurt.Visible || kurt.Sniping || depth <= 0f)
         {
             return;
@@ -188,7 +189,7 @@ public sealed class KurtSprite
         // K_ROLLL and K_ROLLR are the same file, a roll to the right: mirrored for the left.
         var flip = (kurt.Current == Kurt.State.Side && kurt.StrafeSpeed < 0f) || kurt.Current == Kurt.State.RollLeft ? -1f : 1f;
         var (name, frame) = Pick(kurt);
-        var quad = new Quad(kurt.Feet, right * (pixel * flip), up * pixel);
+        var quad = new Quad(feet, right * (pixel * flip), up * pixel);
         var rise = FeetRise / pixel;
         var floor = FloorDepth(space, eye, forward, quad, name, frame, rise);
         var body = InFront(depth, floor);
@@ -197,7 +198,7 @@ public sealed class KurtSprite
         // The flash's hotspot is at Kurt's hotspot plus its offset; it comes nearer with him.
         if (kurt.Muzzle is { } muzzle)
         {
-            var behind = quad with { Feet = kurt.Feet + forward * MuzzleBehind };
+            var behind = quad with { Feet = feet + forward * MuzzleBehind };
             DrawFrame(_muzzleMesh, MuzzleFlash, muzzle.Frame, behind, muzzle.X, muzzle.Y, new Pull(eye, body, body, 0f));
         }
     }
