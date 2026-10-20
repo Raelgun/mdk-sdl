@@ -209,6 +209,8 @@ jump, fall, chute, hang from a ledge, slide, sniper mode, knocked down. Each fra
 - reads the input and accelerates or brakes him (turbo doubles the speed);
 - sweeps his box through the BSP;
 - lands him on floors or on objects flagged as platforms, which carry him along.
+- lifts him in a fan's updraft: his arena's fans, else the second arena's (a corridor's shaft fan
+  lifts him on into the arena above).
 
 The chain gun, sniper mode (a second camera with zoom and guided rounds) and the items (grenades,
 the decoy, the "world's smallest nuclear explosion", the air strike…) are native too. So are the
