@@ -156,6 +156,24 @@ public class FrameBlendTests
     }
 
     [Fact]
+    public void WhatFollowsKurtDoesNotCarryHim()
+    {
+        // LEVEL4's board: Kurt stands on it, it follows him at the tick. He stood still: drawn so,
+        // not moved with it (--fps=240 --trace: 0.3 back and forth as he boards).
+        var kurt = NewKurt();
+        kurt.Feet = Vector3.UnitX;
+        var board = new MdkObject { Arena = "A" };
+        var blend = new FrameBlend(Blending.On);
+        blend.Record(kurt, board, board, 0);
+        board.Remember();
+        board.Position = kurt.Feet;
+        blend.Record(kurt, board, board, 1);
+
+        blend.Update(kurt, Half, Half / 2f);
+        Assert.Equal(kurt.Feet, blend.Feet);
+    }
+
+    [Fact]
     public void TheMouseTurnsKurtEveryFrame()
     {
         var kurt = NewKurt();

@@ -38,10 +38,13 @@ public sealed class FrameBlend(Blending blending)
     public Vector3 Feet { get; private set; }
     public float Yaw { get; private set; }
 
-    /// <summary>Kurt after a step: on or in <paramref name="carrier"/>, riding <paramref name="driven"/>,
+    /// <summary>Kurt after a step: on or in <paramref name="platform"/>, riding <paramref name="driven"/>,
     /// the scripts at <paramref name="tick"/>.</summary>
-    public void Record(Kurt.Kurt kurt, MdkObject? carrier, MdkObject? driven, int tick)
+    public void Record(Kurt.Kurt kurt, MdkObject? platform, MdkObject? driven, int tick)
     {
+        // What follows him (the board he stands on) doesn't carry him.
+        var carrier = platform != driven ? platform : null;
+
         // The carrier a step ago: before this step's tick if one ran (objects move at ticks).
         var was = tick != _ticks ? 0f : 1f;
         _ticks = tick;
