@@ -6,7 +6,7 @@
 # Run from the project folder after `dotnet build`: sh tests/snapshot_test.sh
 # No window: the game draws off screen and never takes the focus.
 export MDK_HIDDEN=1
-MDK=src/Mdk.App/bin/Debug/net10.0/mdk
+MDK=src/Mdk.App/bin/Debug/net10.0/mdk_sdl
 OUT_DIR=${TMPDIR:-/tmp}
 SHOT=$OUT_DIR/mdk_snapshot.bmp
 MDK_USER_DIR=$OUT_DIR/mdk_snapshot_user

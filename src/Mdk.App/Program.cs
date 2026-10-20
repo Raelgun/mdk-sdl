@@ -92,7 +92,7 @@ if (options.ContainsKey("help") || args.Contains("-h"))
     Console.WriteLine("""
         MDK in C# and SDL3. Needs the original game's data (see README.md).
 
-        Usage: mdk [options]
+        Usage: mdk_sdl [options]
 
           --level=N               play level 3-8 at once (961, 963, 966: the 1996 demo's)
           --menu                  the main menu without the splash

@@ -9,7 +9,7 @@
 export MDK_HIDDEN=1
 # Default settings, not the player's (their difficulty changes damage).
 export MDK_USER_DIR="$(mktemp -d)"
-MDK=src/Mdk.App/bin/Debug/net10.0/mdk
+MDK=src/Mdk.App/bin/Debug/net10.0/mdk_sdl
 SHOT=${TMPDIR:-/tmp}/mdk_sniper.bmp
 SPOT=--at=0,120,150,75.5
 # Godot's comparison starts just above the floor.

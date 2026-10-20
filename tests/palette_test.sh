@@ -6,7 +6,7 @@
 # No window: the game draws off screen and never takes the focus.
 export MDK_HIDDEN=1
 export MDK_USER_DIR="$(mktemp -d)"
-MDK=src/Mdk.App/bin/Debug/net10.0/mdk
+MDK=src/Mdk.App/bin/Debug/net10.0/mdk_sdl
 DIR=${TMPDIR:-/tmp}
 FAILED=0
 

@@ -89,16 +89,16 @@ jobs:
       # The native executable starts; without the game it stops there (no GPU on the runners).
       - name: Smoke test
         run: |
-          OUT=$(./publish/mdk --mute 2>&1 || true)
+          OUT=$(./publish/mdk_sdl --mute 2>&1 || true)
           echo "$OUT"
           echo "$OUT" | grep -q "MDK data not found"
-          ./publish/mdk --help | grep -q "Usage: mdk"
+          ./publish/mdk_sdl --help | grep -q "Usage: mdk_sdl"
 
       # The OS's HTTP library (WinHTTP, libcurl) fetches the upscaler's release: TLS, GitHub's
       # redirect, the expected SHA-256.
       - name: Download test
         run: |
-          OUT=$(./publish/mdk --download-test="$UPSCALER_URL" 2>&1 || true)
+          OUT=$(./publish/mdk_sdl --download-test="$UPSCALER_URL" 2>&1 || true)
           echo "$OUT"
           echo "$OUT" | grep -q "SHA-256 $UPSCALER_SHA256"
         env:
@@ -109,11 +109,11 @@ jobs:
         run: |
           mkdir dist
           if [ "$RUNNER_OS" = Windows ]; then
-            7z a -tzip "dist/mdk-${{ matrix.rid }}.zip" ./publish/mdk.exe ./publish/SDL3.dll
+            7z a -tzip "dist/mdk-${{ matrix.rid }}.zip" ./publish/mdk_sdl.exe ./publish/SDL3.dll
           elif [ "$RUNNER_OS" = Linux ]; then
-            tar -czf "dist/mdk-${{ matrix.rid }}.tar.gz" -C publish mdk libSDL3.so -C ../assets icon.png
+            tar -czf "dist/mdk-${{ matrix.rid }}.tar.gz" -C publish mdk_sdl libSDL3.so -C ../assets icon.png
           else
-            (cd publish && zip -q "../dist/mdk-${{ matrix.rid }}.zip" mdk libSDL3.dylib)
+            (cd publish && zip -q "../dist/mdk-${{ matrix.rid }}.zip" mdk_sdl libSDL3.dylib)
             zip -qj "dist/mdk-${{ matrix.rid }}.zip" assets/icon.png
           fi
           ls -la dist
@@ -164,15 +164,15 @@ jobs:
 
       - name: Smoke test
         run: |
-          OUT=$(./publish/mdk --mute 2>&1 || true)
+          OUT=$(./publish/mdk_sdl --mute 2>&1 || true)
           echo "$OUT"
           echo "$OUT" | grep -q "MDK data not found"
-          ./publish/mdk --help | grep -q "Usage: mdk"
+          ./publish/mdk_sdl --help | grep -q "Usage: mdk_sdl"
 
       - name: Archive
         run: |
           mkdir dist
-          tar -czf dist/mdk-linux-arm64.tar.gz -C publish mdk libSDL3.so -C ../assets icon.png
+          tar -czf dist/mdk-linux-arm64.tar.gz -C publish mdk_sdl libSDL3.so -C ../assets icon.png
           ls -la dist
 
       - uses: actions/upload-artifact@v7

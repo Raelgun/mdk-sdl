@@ -160,7 +160,7 @@ The plan is in [docs/architecture.md](docs/architecture.md#roadmap). How the ori
 
 ## Running
 
-Windows x64, Linux x64 and ARM64, and macOS (Apple silicon): one executable each, `mdk.exe` or `mdk` (see
+Windows x64, Linux x64 and ARM64, and macOS (Apple silicon): one executable each, `mdk_sdl.exe` or `mdk_sdl` (see
 [Building](#building)). It is played on Windows; the Linux and macOS builds are only built and
 started on CI so far. Put the program (or this folder) inside the MDK installation folder (for
 example `C:\GOG Games\MDK\mdk-sdl`), install MDK in the default GOG or Steam location, or set the
@@ -175,7 +175,7 @@ beta="C:/Games/MDK (1996-08-06) (beta demo)"
 
 On Linux and macOS copy the installed game's folder (from
 Windows, Wine or the GOG installer); file names match whatever their case. macOS keeps a downloaded
-program in quarantine: `xattr -d com.apple.quarantine mdk`.
+program in quarantine: `xattr -d com.apple.quarantine mdk_sdl`.
 
 ### Steam Deck
 
@@ -186,13 +186,13 @@ Deck yet. In desktop mode:
 2. Point it at the game: put the folder inside the MDK installation, or write its path into
    `mdk_paths.cfg` next to `mdk` (MDK from Steam, installed through Proton:
    `~/.local/share/Steam/steamapps/common/MDK`).
-3. Steam, "Add a Non-Steam Game", choose `mdk`; in its controller settings pick the "Gamepad"
+3. Steam, "Add a Non-Steam Game", choose `mdk_sdl`; in its controller settings pick the "Gamepad"
    layout (not "Keyboard and mouse").
 
 Then it starts from game mode too.
 
 ```
-mdk.exe
+mdk_sdl.exe
 ```
 
 - No option: the splash, then the main menu.
@@ -306,7 +306,7 @@ S the stream after LEVEL7, D the statistics with random counts).
 
 The enhanced look can draw the textures upscaled 2x by an AI upscaler, made once on your computer
 from your copy of the game: Options, Mods, "Make HD textures" (a progress page; leaving it cancels), or
-`mdk --upscale-textures` (all levels; `=3,7` only those; `--hd-model=general|anime`,
+`mdk_sdl --upscale-textures` (all levels; `=3,7` only those; `--hd-model=general|anime`,
 `--hd-scale=2|4`). They are a mod, `mods/hd-textures/` ([docs/modding.md](docs/modding.md)):
 Options, Mods, "HD textures (Real-ESRGAN)" switches them, from the next level on (enhanced look
 only; the original look is unchanged). Other mods override them.
@@ -400,7 +400,7 @@ picker; `Download` itself can't be picked, a folder in it can) and copies its ga
 saves live next to it, in `files`.
 
 Mods and HD textures: make them on a PC ([above](#hd-textures)), copy the `mods` folder (next to
-`mdk.exe`) into the phone's MDK folder, then Options, Mods, "Import from folder" and pick it again: new
+`mdk_sdl.exe`) into the phone's MDK folder, then Options, Mods, "Import from folder" and pick it again: new
 or changed files are copied, `mods` too (an older `textures-hd` becomes the HD textures mod).
 Options, Mods then switches them (enhanced look).
 
@@ -442,12 +442,12 @@ the build without those formats.
 
 ```
 dotnet build
-src/Mdk.App/bin/Debug/net10.0/mdk --level=3
+src/Mdk.App/bin/Debug/net10.0/mdk_sdl --level=3
 ```
 
 One native executable (Native AOT; also needs the Visual Studio C++ tools on Windows, clang and
 zlib on Linux, Xcode on macOS): `sh tools/publish.sh [win-x64|linux-x64|linux-arm64|osx-arm64|osx-x64]` (this
-machine's by default; `publish.bat` on Windows) gives `publish/mdk` or `publish/mdk.exe` (about 5.5 MB) and SDL3's library next to
+machine's by default; `publish.bat` on Windows) gives `publish/mdk_sdl` or `publish/mdk_sdl.exe` (about 5.5 MB) and SDL3's library next to
 it (`SDL3.dll`, `libSDL3.so`, `libSDL3.dylib`).
 
 The icon (original artwork, not the game's) is drawn by `python tools/gen_icon.py` (Pillow, numpy):
