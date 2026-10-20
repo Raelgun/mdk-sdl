@@ -798,7 +798,7 @@ public sealed unsafe partial class Renderer : IDisposable
         Overlay?.Invoke();
         var commands = SDL_AcquireGPUCommandBuffer(_device);
         SDL_GPUTexture* swapchain = null;
-        uint width = HiddenWidth, height = HiddenHeight;
+        uint width = (uint)HiddenSize.Width, height = (uint)HiddenSize.Height;
 
         // A hidden window has no swapchain to show: the frame stays in the offscreen target.
         var shown = _window.Visibility == Visibility.Shown;
@@ -926,7 +926,7 @@ public sealed unsafe partial class Renderer : IDisposable
     /// <summary>The largest texture side every backend takes.</summary>
     private const uint MaxTargetSide = 16384;
 
-    /// <summary>The render scale (%) of a shown window; a hidden one always draws 1280 x 960.</summary>
+    /// <summary>The render scale (%) of a shown window; a hidden one draws <see cref="HiddenSize"/>.</summary>
     public int RenderScale { get; set; } = FullScale;
 
     private uint Scaled(uint side) => Math.Clamp(side * (uint)RenderScale / FullScale, 1u, MaxTargetSide);
@@ -977,8 +977,10 @@ public sealed unsafe partial class Renderer : IDisposable
         format.ToString().Replace("SDL_GPU_TEXTUREFORMAT_", "", StringComparison.Ordinal);
 
     /// <summary>The offscreen frame of a hidden window (the shown one's default size).</summary>
-    private const uint HiddenWidth = 1280;
-    private const uint HiddenHeight = 960;
+    public static readonly Resolution DefaultHiddenSize = new(1280, 960);
+
+    /// <summary>The frame size of a hidden window (--size; tests, videos).</summary>
+    public Resolution HiddenSize { get; set; } = DefaultHiddenSize;
 
     /// <summary>The cameras' and the canvas' aspect: the frame's, or an eye's half in full side by side.</summary>
     public float AspectRatio => StereoModes.EyeAspect(StereoMode, _targetHeight == 0 ? 4f / 3f : (float)_targetWidth / _targetHeight);

@@ -240,8 +240,10 @@ mdk.exe
   too when it starts in the menus), 0.1 s a frame; in a level Kurt is healed and problems print
   as `Soak problem` (`--tour`: every arena in turn during `--wait`, doors shut before each teleport).
   `--press=QuickSave@1,Menu.Accept@1.5`: presses game keys, or menu keys after `Menu.`, once at
-  those times. `--frames=dir,count[,every]`: after `--wait`, saves every Nth frame of a level (4:
-  15 a second) as `frame000.bmp`..., then quits (the animation above).
+  those times. `--frames=dir,count[,every]`: after `--wait`, saves every Nth frame of a level or
+  of the fall (4: 15 a second) as `frame000.bmp`..., then quits (the animation above). For videos:
+  `--size=2560x1440` sets the hidden frame's size (1280x960 by default), `--record-audio=file.wav`
+  saves the sound from the start (with `--mute`, in step with the frames).
 
 Settings (the options below, the mods' switches) and saved games
 are kept next to the executable (`settings.cfg`, `saves/*.sav`; `MDK_USER_DIR` overrides the

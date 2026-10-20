@@ -62,6 +62,10 @@ public sealed record GameOptions(Start Start, ViewerOptions Level)
     public float? Perf { get; init; }
     /// <summary>The GPU backend instead of the settings' (--gpu=d3d12|vulkan|metal|auto; tests).</summary>
     public string? Gpu { get; init; }
+    /// <summary>A hidden window's frame size instead of 1280 x 960 (--size; tests, videos).</summary>
+    public Resolution? HiddenSize { get; init; }
+    /// <summary>The sound mixed from the start saved as this WAV (--record-audio; with --mute, in step with --frames).</summary>
+    public string? RecordAudio { get; init; }
     /// <summary>The platform's import of the game files again (Android: the folder picked again,
     /// HD textures made on a PC with it); null where the game reads them in place.</summary>
     public Action? Import { get; init; }
@@ -194,7 +198,17 @@ public sealed class Game : IDisposable
         var size = visibility == Visibility.Shown ? settings.WindowSize : Settings.DefaultWindow;
         _window = new Window("MDK", size.Width, size.Height, visibility);
         _renderer = new Renderer(_window, Backend(options.Gpu, settings));
+        if (options.HiddenSize is { } hiddenSize)
+        {
+            _renderer.HiddenSize = hiddenSize;
+        }
+
         _audio = new AudioDevice(options.Level.Sound == SoundMode.Muted ? Output.Muted : Output.Speakers);
+        if (options.RecordAudio is { } recording)
+        {
+            _audio.Record(recording);
+        }
+
         // Tests choose the look (saved only if the options change).
         if (options.Graphics is { } graphics)
         {
@@ -280,6 +294,7 @@ public sealed class Game : IDisposable
         var step = _soak != null ? Viewer.Step * SoakSteps : Viewer.Step;
         var clock = Stopwatch.StartNew();
         var time = 0f;
+        var frameStep = 0;
         while (_screen != null && _window.PumpEvents(_input))
         {
             var elapsed = test ? step : (float)clock.Elapsed.TotalSeconds;
@@ -301,7 +316,11 @@ public sealed class Game : IDisposable
             }
 
             var shot = test && !_levelShot && time >= _options.Wait ? _options.Screenshot : null;
-            var next = _screen.Frame(elapsed * _commands.TimeScale, shot);
+
+            // --frames of a screen before the level (the fall): the level's own are the viewer's.
+            var frames = _options.Start != Start.Level && time >= _options.Wait ? _options.Level.Frames : null;
+            var frame = frames?.PathOf(frameStep++);
+            var next = _screen.Frame(elapsed * _commands.TimeScale, shot ?? frame);
 
             // A console command leaves the screen (map, load, quit).
             var command = _commands.TakeNext();
@@ -322,6 +341,11 @@ public sealed class Game : IDisposable
             if (shot != null)
             {
                 Console.WriteLine($"Saved {shot}");
+                break;
+            }
+
+            if (frames != null && frames.IsLast(frameStep - 1))
+            {
                 break;
             }
 
