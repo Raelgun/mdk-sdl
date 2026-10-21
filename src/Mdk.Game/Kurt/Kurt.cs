@@ -67,6 +67,13 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
     private const float CreepSpeed = 0.35f * Ticks;
     /// <summary>Downhill glue: on floors flatter than this the feet follow the slope down.</summary>
     private const float GlueNz = 0.25f;
+    /// <summary>The glue's fastest drop (u/s), under the hard landing's: the landing that follows it
+    /// must not hurt.</summary>
+    private const float GlueMaxSpeed = 90f;
+    /// <summary>Running, or standing, Kurt starts the fall animation only after this long (seconds) off
+    /// the floor: down a steep slope his feet leave it for a step or two at a time, and the animation
+    /// flipped between the run and the fall.</summary>
+    private const float FallGrace = 0.15f;
     /// <summary>Falling onto a platform first goes to 0.05 above its top (damp_gravity).</summary>
     private const float PlatformLift = 0.05f;
     /// <summary>Objects this far around a move (and Kurt's height above it) may stop it.</summary>
@@ -416,7 +423,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
             }
             else
             {
-                GlueDownhill(move, delta);
+                GlueDownhill(move, delta, exact: true);
             }
         }
         else
@@ -483,14 +490,18 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
     /// teleport, a ride, a cutscene or the level's end (it played on until the level ended).</summary>
     private void StopChuteSound() => mixer.Stop(ChuteOnSound);
 
-    /// <summary>On a floor flatter than 75°, walking downhill keeps the feet on it.</summary>
-    private void GlueDownhill(Vector3 move, float delta)
+    /// <summary>On a floor flatter than 75°, walking downhill keeps the feet on it. With
+    /// <paramref name="exact"/>, the feet follow the slope's whole drop (the move along the slope over
+    /// the normal's z), not only its share along the normal: on a steep floor the feet stayed above it
+    /// every other step, and Kurt flickered between the run and the fall.</summary>
+    private void GlueDownhill(Vector3 move, float delta, bool exact = false)
     {
         var n = _floorNormal.Z < 0f ? -_floorNormal : _floorNormal;
         var downhill = move.X * n.X + move.Y * n.Y;
         if (n.Z > GlueNz && downhill > 0f)
         {
-            VerticalSpeed = MathF.Min(VerticalSpeed, -downhill / delta);
+            var speed = (exact ? downhill / n.Z : downhill) / delta;
+            VerticalSpeed = MathF.Min(VerticalSpeed, -MathF.Min(speed, exact ? GlueMaxSpeed : speed));
         }
 
         VerticalSpeed = MathF.Max(VerticalSpeed - Gravity * delta, -MaxFallSpeed);
@@ -629,9 +640,13 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
         }
     }
 
+    /// <summary>How long Kurt has been off the floor (seconds).</summary>
+    private float _airFor;
+
     private void UpdateState(float forward, float strafe, float delta)
     {
         StateTime += delta;
+        _airFor = OnFloor ? 0f : _airFor + delta;
         if (UpdateCombatState(delta))
         {
             return;
@@ -655,7 +670,8 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
             {
                 SetState(MathF.Abs(ForwardSpeed) > MovingSpeed ? State.RunJump : State.Jump);
             }
-            else if (VerticalSpeed < FallStartSpeed && (Current is not (State.Jump or State.RunJump) || done))
+            else if (VerticalSpeed < FallStartSpeed && (Current is not (State.Jump or State.RunJump) || done)
+                && (_airFor >= FallGrace || Current is State.Jump or State.RunJump or State.Fall))
             {
                 SetState(State.Fall);
             }
