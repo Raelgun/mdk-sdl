@@ -17,6 +17,52 @@ public class ShipCargoTests
     /// <summary>DANT_10's bomb ship script: follow_path, then spawn_chain 1, "XBANG".</summary>
     private const int BombShip = 0x20fbc;
 
+    /// <summary>DANT_10's soldier ship script: follow_path, then spawn_chain 3, "XG".</summary>
+    private const int SoldierShip = 0x20fe6;
+    /// <summary>A hanging soldier (XG, about 8 high) holds the feet of the one above: about 12 apart.</summary>
+    private const float SoldierSpacing = 8f;
+
+    [DataFact]
+    public void SoldiersHangInALineBelowTheShip()
+    {
+        var runtime = CreateRuntime();
+        var anyone = runtime.Objects.First(o => o.Arena == "DANT_10" && !o.Dead);
+        var ship = runtime.Spawn(anyone, "XE", new Vector3(1301f, 5018f, 315f), 180f, -1, SoldierShip, ScriptRuntime.Spawning.Plain)!;
+        for (var i = 0; i < 10; i++)
+        {
+            runtime.Update(Tick);
+        }
+
+        // The chain hangs by the hand its animation raises, not the rest pose's (which bunched it up).
+        var soldiers = runtime.Objects.Where(o => o.TypeName == "XG" && o.Leader == ship).OrderBy(o => o.InstanceId).ToList();
+        Assert.Equal(3, soldiers.Count);
+        var above = ship.Position.Z;
+        foreach (var soldier in soldiers)
+        {
+            Assert.True(above - soldier.Position.Z > SoldierSpacing, $"soldier at {soldier.Position.Z}, the one above at {above}");
+            above = soldier.Position.Z;
+        }
+    }
+
+    private static ScriptRuntime CreateRuntime()
+    {
+        var data = MdkData.Find()!;
+        var level = new LevelData(data, 7);
+        var cmi = Cmi.Load(data.PathOf("TRAVERSE/LEVEL7/LEVEL7.CMI"));
+        var sprites = Bni.Load(data.PathOf("TRAVERSE/TRAVSPRT.BNI"));
+        var space = new ArenaSpace();
+        foreach (var arena in level.Arenas.Where(a => level.IsReachable(a.Name)))
+        {
+            space.Add(arena);
+        }
+
+        var mixer = new SoundMixer(new AudioDevice(Output.Muted), _ => null);
+        var runtime = new ScriptRuntime(level, cmi, sprites, space, new TriangleGroups(), mixer, new Kurt.Kurt(space, mixer, _ => 1));
+        runtime.TeleportKurt("DANT_10", new Vector3(545.89f, 5023.39f, 184.54f), 0f);
+        runtime.Update(Tick);
+        return runtime;
+    }
+
     [DataFact]
     public void TheBombHangsFromTheShipsHook()
     {
