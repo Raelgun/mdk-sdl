@@ -79,7 +79,29 @@ public enum Backdrop { Sky, Clear, Keep }
 
 /// <summary>A view's camera: what a stereo eye is built from (the projection is shifted off-centre
 /// for convergence).</summary>
-public readonly record struct ViewCamera(Vector3 Forward, Vector3 Up, Matrix4x4 Projection, float Near);
+public readonly record struct ViewCamera(Vector3 Forward, Vector3 Up, Matrix4x4 Projection, float Near)
+{
+    /// <summary>Clip space to world directions for the sky, built from the camera's axes and its
+    /// projection: <c>(x, y, 1, 1)</c> goes to <c>forward + right·x′ + up·y′</c>, on one plane. sky.hlsl
+    /// blends its screen triangle's corners across the pixels, which is right only for corners in one
+    /// plane: inverting rotation × projection in float32 (near 0.5, far 20000) put them off it at clip
+    /// depth 1, by an error that changed with the camera's angle, and the sky shook by several pixels
+    /// when turning while the world stayed still.</summary>
+    public Matrix4x4 SkyDirections()
+    {
+        var forward = Vector3.Normalize(Forward);
+        var right = Vector3.Normalize(Vector3.Cross(forward, Up));
+        var up = Vector3.Cross(right, forward);
+        var across = right / Projection.M11;
+        var upwards = up / Projection.M22;
+        var centre = forward + right * (Projection.M31 / Projection.M11) + up * (Projection.M32 / Projection.M22);
+        return new Matrix4x4(
+            across.X, across.Y, across.Z, 0f,
+            upwards.X, upwards.Y, upwards.Z, 0f,
+            centre.X, centre.Y, centre.Z, 0f,
+            0f, 0f, 0f, 1f);
+    }
+}
 
 /// <summary>The camera: its view-projection, the inverse of its rotation and projection (clip space
 /// to world directions, for the sky), and its position.</summary>
@@ -1017,7 +1039,9 @@ public sealed unsafe partial class Renderer : IDisposable
     private void DrawSky(SDL_GPUCommandBuffer* commands, SDL_GPURenderPass* pass, View view, Panorama panorama)
     {
         SDL_BindGPUGraphicsPipeline(pass, Pipeline(new PipelineKey("sky", Pass.DoubleSided, Primitive.Triangles, Geometry.Screen, _passSamples, Output.Colour)));
-        var clipToDirection = view.ClipToDirection;
+        // The camera's own axes give steady directions (ViewCamera.SkyDirections); a stereo eye's
+        // shifted frustum keeps the inverse.
+        var clipToDirection = view.Camera is { } camera && _eyeSide == 0f ? camera.SkyDirections() : view.ClipToDirection;
         SDL_PushGPUVertexUniformData(commands, 0, (IntPtr)(&clipToDirection), (uint)sizeof(Matrix4x4));
         BindPanorama(commands, pass, panorama, panorama.Sky, 0f, view.Position);
         DrawPrimitives(pass, ScreenTriangle, 0, Primitive.Triangles);
