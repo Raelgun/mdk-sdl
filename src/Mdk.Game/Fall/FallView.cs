@@ -42,9 +42,16 @@ public sealed class FallView
     private const float RadarBaseFactor = -4f;
     private const float RadarFirstAngle = 60f;
     private const int RadarVertices = 138;
-    private static readonly Vector4 TrailColour = new(0.8f, 0.8f, 0.8f, 0.35f);
-    private const float TrailWidth = 0.5f;
-    private const float TrailWiden = 1.5f;
+    // The trails as the original draws them: widest at the missile, narrowing to the tail; white along
+    // them, yellow just before the missile; strong at the missile, fading out towards the tail.
+    private const float TrailHeadWidth = 2.4f;
+    private const float TrailTailWidth = 0.3f;
+    private static readonly Vector3 TrailWhite = new(1f, 1f, 1f);
+    private static readonly Vector3 TrailYellow = new(1f, 0.86f, 0.12f);
+    /// <summary>The share of the trail (from the missile back) that turns from white to yellow.</summary>
+    private const float TrailYellowShare = 0.3f;
+    private const float TrailHeadAlpha = 0.9f;
+    private const float TrailTailAlpha = 0.05f;
     private const int TrailMissiles = 24;
     // The intro as f goes 0 to 1 (0x41106c): space (600 x 360) behind, the moon (128²) centred at
     // (300, 270 − 90 f) scaled (64 + 256 f) / 256, the earth (512²) centred at (300, 488 − 224 f)
@@ -458,7 +465,8 @@ public sealed class FallView
     }
 
     /// <summary>The smoke trails (0x439454, approximated): a band along the last 32 points of each
-    /// missile, narrowing towards its tail.</summary>
+    /// missile (oldest first), narrowing towards its tail. Personal tweak: shaped and coloured after the
+    /// original's (screenshots), widest and yellow at the missile, thinning and fading to white behind.</summary>
     private void QueueTrails(FallSim sim)
     {
         var vertices = new List<Vertex>();
@@ -477,12 +485,17 @@ public sealed class FallView
 
                 var side = new Vector3(b.Y - a.Y, a.X - b.X, 0f);
                 side = side == Vector3.Zero ? side : Vector3.Normalize(side);
-                var wa = TrailWidth + TrailWiden * (count - i) / FallMissile.TrailPoints;
-                var wb = TrailWidth + TrailWiden * (count - i - 1) / FallMissile.TrailPoints;
+
+                // 0 at the tail, 1 at the missile.
+                var ta = (float)i / (count - 1);
+                var tb = (float)(i + 1) / (count - 1);
+                var (wa, ca) = TrailAt(ta);
+                var (wb, cb) = TrailAt(tb);
                 Vector3[] quad = [a - side * wa, a + side * wa, b + side * wb, b - side * wb];
+                uint[] colours = [ca, ca, cb, cb];
                 foreach (var k in (int[])[0, 1, 2, 0, 2, 3])
                 {
-                    vertices.Add(new Vertex(quad[k], Vector2.Zero));
+                    vertices.Add(new Vertex(quad[k], Vector2.Zero, colours[k]));
                 }
             }
         }
@@ -493,6 +506,17 @@ public sealed class FallView
         }
 
         _renderer.UpdateMesh(_trailMesh, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(vertices));
-        _renderer.Draw(_trailMesh, 0, vertices.Count, Material.Flat(_effects.Apply(TrailColour), Pass.Blended));
+        _renderer.Draw(_trailMesh, 0, vertices.Count, Material.Flat(_effects.Apply(Vector4.One), Pass.Blended));
+    }
+
+    /// <summary>A trail's half width and vertex colour at <paramref name="t"/> of the way from its
+    /// tail (0) to the missile (1).</summary>
+    private static (float HalfWidth, uint Colour) TrailAt(float t)
+    {
+        var width = float.Lerp(TrailTailWidth, TrailHeadWidth, t);
+        var yellow = Math.Clamp((t - (1f - TrailYellowShare)) / TrailYellowShare, 0f, 1f);
+        var rgb = Vector3.Lerp(TrailWhite, TrailYellow, yellow) * byte.MaxValue;
+        var alpha = float.Lerp(TrailTailAlpha, TrailHeadAlpha, t) * byte.MaxValue;
+        return (width, Vertex.Rgba((byte)rgb.X, (byte)rgb.Y, (byte)rgb.Z, (byte)alpha));
     }
 }
