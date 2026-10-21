@@ -570,7 +570,9 @@ public sealed class MdkObject : ISoundSource
     public int FindPart(string name) =>
         Model?.PartList.FindIndex(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) ?? -1;
 
-    /// <summary>World position of a model reference point (the attachment points obj+0x1b0).</summary>
+    /// <summary>World position of a model reference point (the attachment points obj+0x1b0), where the
+    /// current animation frame has it (animations keep each point's place per frame): LEVEL7's soldiers
+    /// hanging in a chain (XG) raise the hand they hang by, so rest-pose points bunched the chain up.</summary>
     public Vector3 ReferencePoint(int index)
     {
         if (Model == null || index >= Model.ReferencePoints.Count)
@@ -578,7 +580,14 @@ public sealed class MdkObject : ISoundSource
             return Position;
         }
 
-        return Position + Vector3.Transform(Model.ReferencePoints[index] * Scale, Matrix4x4.CreateRotationZ(float.DegreesToRadians(Yaw)));
+        var point = Model.ReferencePoints[index];
+        if (Animation is { FrameCount: > 0 } animation && index < animation.ReferencePoints.Count)
+        {
+            var frames = animation.ReferencePoints[index];
+            point = frames[Math.Clamp(AnimationFrame, 0, frames.Length - 1)];
+        }
+
+        return Position + Vector3.Transform(point * Scale, Matrix4x4.CreateRotationZ(float.DegreesToRadians(Yaw)));
     }
 
     /// <summary>World position of the centre of a model part (rest pose).</summary>
