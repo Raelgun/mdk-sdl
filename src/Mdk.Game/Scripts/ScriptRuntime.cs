@@ -342,7 +342,8 @@ public sealed partial class ScriptRuntime
             Updraft = (arena, point, vz, dt) => Fans.Query(arena, point, vz, Fans.MaskEffects, dt),
             GroupFacets = GroupFacets,
         };
-        kurt.Updraft = (vz, dt) => Fans.Query(CurrentArena, kurt.Feet, vz, Fans.MaskKurt, dt);
+        kurt.Updraft = (vz, dt) => KurtUpdraft(kurt.Feet, vz, dt);
+        kurt.Keeper = KeeperAt;
         Level = level;
         Cmi = cmi;
         Mixer = mixer;
@@ -379,12 +380,21 @@ public sealed partial class ScriptRuntime
         while (_time >= Tick)
         {
             _time -= Tick;
+            foreach (var obj in Objects)
+            {
+                obj.Remember();
+            }
+
             RunTick();
             _tickCount++;
         }
 
         Rides.Follow();
     }
+
+    /// <summary>How far a frame <paramref name="ahead"/> seconds after the last step is from the
+    /// last tick to the next (0-1).</summary>
+    public float TickBlend(float ahead) => Math.Clamp((_time + ahead) / Tick, 0f, 1f);
 
     public ArenaState GetArenaState(string arena)
     {
@@ -2213,6 +2223,23 @@ public sealed partial class ScriptRuntime
     {
         var (colour, range) = SparkColours[(int)Spark.Fire];
         Debris.Spark(arena, point, 1, SparkSize, colour, range, 1f, Debris.Launch.Still);
+    }
+
+    /// <summary>Where a platform that keeps Kurt is (flag 0x800000), or null.</summary>
+    private static Vector3? KeeperAt(object owner) =>
+        owner is MdkObject { Dead: false } obj && (obj.Flags & MdkObject.FlagStandable) != 0 ? obj.Position : null;
+
+    /// <summary>Kurt's updraft (damp_gravity 0x469efc): his arena's fans, else the second arena's.
+    /// E.g. LEVEL3's CHMO_6 shaft fan lifts him on through the floor doorway into HMO_8.</summary>
+    private float KurtUpdraft(Vector3 feet, float vz, float dt)
+    {
+        var lifted = Fans.Query(CurrentArena, feet, vz, Fans.MaskKurt, dt);
+        if (!float.IsNaN(lifted) || SecondArena == "")
+        {
+            return lifted;
+        }
+
+        return Fans.Query(SecondArena, feet, vz, Fans.MaskKurt, dt);
     }
 
     /// <summary>The frame count of an arena's (or the level's) texture, 0 without one.</summary>

@@ -342,15 +342,24 @@ public sealed unsafe class Window : IDisposable
         }
 
         _gamepads?.Update(input);
+
+        // Caps Lock's light ("always run"); a hidden window (tests) ignores the real keyboard's.
+        if (Visibility == Visibility.Shown)
+        {
+            var locked = (SDL_GetModState() & SDL_Keymod.SDL_KMOD_CAPS) != 0;
+            input.LockCaps(locked ? Input.Lock.On : Input.Lock.Off);
+        }
+
         return true;
     }
 
-    /// <summary>A finger, or a mouse event SDL makes of one.</summary>
+    /// <summary>A finger, or a mouse event SDL makes of one. A finger's click release passes: a menu
+    /// tap that starts play lets go in play, and the left button (fire) would stay held.</summary>
     private static bool IsTouch(in SDL_Event e) => (SDL_EventType)e.type switch
     {
         SDL_EventType.SDL_EVENT_FINGER_DOWN or SDL_EventType.SDL_EVENT_FINGER_MOTION
             or SDL_EventType.SDL_EVENT_FINGER_UP or SDL_EventType.SDL_EVENT_FINGER_CANCELED => true,
-        SDL_EventType.SDL_EVENT_MOUSE_BUTTON_DOWN or SDL_EventType.SDL_EVENT_MOUSE_BUTTON_UP => e.button.which == SDL_TOUCH_MOUSEID,
+        SDL_EventType.SDL_EVENT_MOUSE_BUTTON_DOWN => e.button.which == SDL_TOUCH_MOUSEID,
         SDL_EventType.SDL_EVENT_MOUSE_MOTION => e.motion.which == SDL_TOUCH_MOUSEID,
         _ => false,
     };

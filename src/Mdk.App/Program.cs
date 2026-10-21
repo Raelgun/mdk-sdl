@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using Mdk.Engine.Platform;
 using Mdk.Engine.Render;
 using Mdk.Formats;
 using Mdk.Game;
@@ -10,7 +11,7 @@ using Mdk.Game.Scripts;
 
 // MDK in C# and SDL3: the splash, the main menu, then the levels in the order 7, 6, 3, 4, 8, 5 with
 // their loading screens, briefings, statistics and saves. In a level: WASD/arrows, mouse, Space
-// jumps, Shift runs, Ctrl or the left mouse button fires, Enter uses the item, Tab/[/] and 1-5
+// jumps, Shift runs (Caps Lock: always), Ctrl or the left mouse button fires, Enter uses the item, Tab/[/] and 1-5
 // select it, the right mouse button toggles sniper mode (wheel or PageUp/PageDown zoom, Tab/[/]
 // select the ammo), F1 flying camera with E/Q up and down, F12 screenshot, Esc the pause menu,
 // F2 quick save (names the save), F9 quick load, F3 the debug overlay, the key left of 1 the console.
@@ -38,6 +39,8 @@ using Mdk.Game.Scripts;
 //   --gamma=0.5-2           the display's gamma instead of the settings' (tests)
 //   --gpu=d3d12|vulkan|metal the GPU backend instead of the settings' (tests; not saved)
 //   --hidden                no window, frames drawn off screen (tests; also MDK_HIDDEN=1)
+//   --size=WxH              the hidden frame's size instead of 1280x960 (tests, videos)
+//   --record-audio=file.wav the sound from the start as a WAV (with --mute, in step with --frames; videos)
 //   --screenshot=file.bmp   save a frame after --wait seconds of game time, print Kurt, quit (tests)
 //   --wait=seconds          game time before the screenshot
 //   --walk=seconds          hold "forward" for this long (tests)
@@ -64,6 +67,7 @@ using Mdk.Game.Scripts;
 //   --console="pos;god"     open the console after the delay and run these commands (tests)
 //   --press=QuickSave@1,Menu.Accept@1.5  press game or menu keys once at these times (tests)
 //   --frames=dir,count[,every] after --wait, save every Nth frame (4: 15 a second) of a level, then quit
+//   --fps=N                 test frames a second instead of 60: above, frames drawn between the steps (tests)
 //   --perf[=warmup]         after warmup seconds (2) of game time, wait for the GPU each frame and print
 //                           the frames' costs at the end: sections, allocations, collections (tests)
 //   --soak[=seed]           random seeded keys on every screen, 6 steps a frame, checks in a level
@@ -89,7 +93,7 @@ if (options.ContainsKey("help") || args.Contains("-h"))
     Console.WriteLine("""
         MDK in C# and SDL3. Needs the original game's data (see README.md).
 
-        Usage: mdk [options]
+        Usage: mdk_sdl [options]
 
           --level=N               play level 3-8 at once (961, 963, 966: the 1996 demo's)
           --menu                  the main menu without the splash
@@ -212,6 +216,7 @@ var viewer = new ViewerOptions(level, position, yaw, pitch, sound)
     Roll = options.TryGetValue("roll", out var roll) ? (roll == "left" ? BetaRoll.Left : BetaRoll.Right) : null,
     Console = options.GetValueOrDefault("console"),
     Frames = options.TryGetValue("frames", out var frames) ? FrameDump.Parse(frames) : null,
+    FrameRate = Number("fps"),
 };
 
 // Test options of a level (and --screenshot without --menu) skip the menu, as in the Godot port.
@@ -251,6 +256,8 @@ using var game = new Game(data, new GameOptions(start, viewer)
     Presses = options.TryGetValue("press", out var presses) ? TestPresses.Parse(presses) : null,
     Mods = options.TryGetValue("mod", out var mods) ? mods.Split(',', StringSplitOptions.RemoveEmptyEntries) : null,
     Gpu = options.GetValueOrDefault("gpu"),
+    RecordAudio = options.GetValueOrDefault("record-audio"),
+    HiddenSize = options.TryGetValue("size", out var sizeText) && Resolution.TryParse(sizeText, out var hiddenSize) ? hiddenSize : null,
     Perf = options.TryGetValue("perf", out var perf) ? (perf.Length != 0 ? float.Parse(perf, CultureInfo.InvariantCulture) : DefaultWarmup) : null,
 });
 game.Run();

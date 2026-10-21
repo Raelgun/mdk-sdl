@@ -5,7 +5,7 @@
 # Run from the project folder after `dotnet build`: sh tests/flow_test.sh
 # No window: the game draws off screen and never takes the focus.
 export MDK_HIDDEN=1
-MDK=src/Mdk.App/bin/Debug/net10.0/mdk
+MDK=src/Mdk.App/bin/Debug/net10.0/mdk_sdl
 OUT_DIR=${TMPDIR:-/tmp}
 SHOT=$OUT_DIR/mdk_flow.bmp
 MDK_USER_DIR=$OUT_DIR/mdk_flow_user
@@ -52,9 +52,9 @@ echo "$OUT" | grep -q "^Menu: Difficulty: Normal | Back$"; check "game page" $?
 OUT=$(run --menu --options --press=Menu.Down@0.3,Menu.Down@0.4,Menu.Accept@0.5 --wait=1)
 echo "$OUT" | grep -q "^Menu: Mode: Off | Separation: 0.25 | Convergence: 10 | Head tracking: Off | Back$"; check "3D stereo page" $?
 OUT=$(run --menu --controls --wait=1)
-echo "$OUT" | grep -q "^Menu: Mouse sensitivity: 1.00 | Invert mouse: Off | Forward: W | .* | Quick load: F9 | Default keys | Back$"; check "controls page" $?
+echo "$OUT" | grep -q "^Menu: Mouse sensitivity: 1.00 | Invert mouse: Off | Forward: W | .* | Always run: CapsLock | .* | Quick load: F9 | Default keys | Back$"; check "controls page" $?
 OUT=$(run --menu --gamepad --wait=1)
-echo "$OUT" | grep -q "^Menu: Look sensitivity: 1.00 | Invert look: Off | Jump: A | Run: B | Run lock: L3 | Fire: RT | Sniper mode: LT | .* | Quick load: - | Default buttons | Back$"; check "gamepad page" $?
+echo "$OUT" | grep -q "^Menu: Look sensitivity: 1.00 | Invert look: Off | Jump: A | Run: B | Always run: L3 | Fire: RT | Sniper mode: LT | .* | Quick load: - | Default buttons | Back$"; check "gamepad page" $?
 
 # -nobloodno / -bloodyes (not saved) set gore (Options, Graphics).
 OUT=$(run --menu --options --nobloodno --press=Menu.Down@0.3,Menu.Accept@0.5 --wait=1)

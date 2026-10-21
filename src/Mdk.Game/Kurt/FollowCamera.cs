@@ -23,6 +23,8 @@ public sealed class FollowCamera(ArenaSpace? space = null)
     private const float MouseDegrees = 0.15f;
     private const float MinPitch = -60f;
     private const float MaxPitch = 90f;
+    /// <summary>The view's pitch stays short of straight up or down: past it the view turns over.</summary>
+    private const float ViewPitchLimit = 89f;
     private const float AirPitchRate = 0.667f * Kurt.Ticks;
     private const float AirPitchMax = 40f;
     private const float AirPitchDecay = 40f;
@@ -74,6 +76,11 @@ public sealed class FollowCamera(ArenaSpace? space = null)
     private float _shake;
     private float _shakeTime;
     private readonly Random _random = new();
+    /// <summary>The pitch but the mouse's (degrees), the pivot and the roll of the last two steps,
+    /// for frames between them (<see cref="Blend"/>).</summary>
+    private readonly record struct Aim(float Pitch, float Pivot, float Roll);
+    private Aim? _previousAim;
+    private Aim _aim;
 
     public Vector3 Position { get; private set; }
     public Vector3 Forward { get; private set; } = Vector3.UnitY;
@@ -122,7 +129,8 @@ public sealed class FollowCamera(ArenaSpace? space = null)
         }
 
         _lookOffset = Math.Clamp(_lookOffset, MinPitch - _arenaPitch - _airPitch, MaxPitch - _arenaPitch - _airPitch);
-        var pitch = float.DegreesToRadians(_arenaPitch + _lookOffset + _airPitch - ClimbPitch * _climb + kurt.CameraTilt);
+        var degrees = _arenaPitch + _lookOffset + _airPitch - ClimbPitch * _climb + kurt.CameraTilt;
+        var pitch = float.DegreesToRadians(Math.Clamp(degrees, -ViewPitchLimit, ViewPitchLimit));
         var facing = kurt.Facing;
         Position = Point(kurt.Feet, facing, pitch, kurt.CameraPivot);
         if (space != null && !kurt.Sniping && !kurt.Frozen && kurt.Current != Kurt.State.Dead)
@@ -130,11 +138,61 @@ public sealed class FollowCamera(ArenaSpace? space = null)
             Position = Clear(kurt, space, Position, delta);
         }
 
+        Orient(facing, pitch);
+        UpdateShake(delta);
+        Turn(ShakeOffset * float.DegreesToRadians(FieldOfView) / ViewHeight, float.DegreesToRadians(kurt.CameraRoll.Roll));
+
+        var aim = new Aim(_arenaPitch + _airPitch - ClimbPitch * _climb + kurt.CameraTilt, kurt.CameraPivot, kurt.CameraRoll.Roll);
+        _previousAim = _previousAim == null ? aim : _aim;
+        _aim = aim;
+    }
+
+    /// <summary>Looks along <paramref name="facing"/>, <paramref name="pitch"/> (radians) down.</summary>
+    private void Orient(Vector3 facing, float pitch)
+    {
         Forward = Vector3.Normalize(facing * MathF.Cos(pitch) - Vector3.UnitZ * MathF.Sin(pitch));
         Up = Vector3.Normalize(Vector3.Cross(Vector3.Cross(Forward, Vector3.UnitZ), Forward));
         Right = Vector3.Normalize(Vector3.Cross(Forward, Vector3.UnitZ));
-        UpdateShake(delta);
-        Turn(ShakeOffset * float.DegreesToRadians(FieldOfView) / ViewHeight, float.DegreesToRadians(kurt.CameraRoll.Roll));
+    }
+
+    /// <summary>A frame's mouse look up and down, at once rather than with the next step (screens
+    /// above 60 Hz).</summary>
+    public void MouseLook(Kurt kurt, Input input)
+    {
+        if (kurt.TopDownHeight != null || kurt.Sniping)
+        {
+            return;
+        }
+
+        _lookOffset = Math.Clamp(_lookOffset + input.TakeMouseY() * MouseDegrees, MinPitch - _arenaPitch - _airPitch, MaxPitch - _arenaPitch - _airPitch);
+    }
+
+    /// <summary>A frame between steps: the camera placed again for Kurt as drawn (<paramref name="feet"/>,
+    /// <paramref name="yaw"/>), its pitch, pivot and roll <paramref name="alpha"/> of the way between
+    /// the last two steps', the mouse's look as it is now. (The camera's clearance moved Kurt, not
+    /// the camera: it's where his feet put it.) The next step places it anew.</summary>
+    public void Blend(Kurt kurt, Vector3 feet, float yaw, float alpha)
+    {
+        var yawRadians = float.DegreesToRadians(yaw);
+        var facing = new Vector3(MathF.Cos(yawRadians), MathF.Sin(yawRadians), 0f);
+        if (kurt.TopDownHeight is { } height)
+        {
+            Position = feet + Vector3.UnitZ * height;
+            Forward = -Vector3.UnitZ;
+            Up = facing;
+            Right = new Vector3(facing.Y, -facing.X, 0f);
+            return;
+        }
+
+        if (_previousAim is not { } from)
+        {
+            return;
+        }
+
+        var pitch = float.DegreesToRadians(FrameBlend.Lerp(from.Pitch, _aim.Pitch, alpha) + _lookOffset);
+        Position = Point(feet, facing, pitch, FrameBlend.Lerp(from.Pivot, _aim.Pivot, alpha));
+        Orient(facing, pitch);
+        Turn(ShakeOffset * float.DegreesToRadians(FieldOfView) / ViewHeight, float.DegreesToRadians(FrameBlend.Lerp(from.Roll, _aim.Roll, alpha)));
     }
 
     /// <summary>Turns the view by the shake (radians across and up), then rolls it: a positive roll

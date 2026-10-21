@@ -5,7 +5,7 @@
 export MDK_HIDDEN=1
 # Default settings, not the player's (their difficulty changes damage).
 export MDK_USER_DIR="$(mktemp -d)"
-MDK=src/Mdk.App/bin/Debug/net10.0/mdk
+MDK=src/Mdk.App/bin/Debug/net10.0/mdk_sdl
 OUT=${TMPDIR:-/tmp}
 FAILED=0
 for LEVEL in 3 4 5 6 7 8; do

@@ -8,7 +8,7 @@ of any size and new meshes don't fit it, and a faithful mode should stay faithfu
 ## Where mods live
 
 ```
-mdk.exe
+mdk_sdl.exe
 mods/
   my-mod/                 one folder per mod (folders starting with "." are ignored)
     mod.txt               optional: name, author, version, description, priority

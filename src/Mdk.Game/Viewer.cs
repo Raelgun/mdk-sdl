@@ -75,6 +75,8 @@ public sealed record ViewerOptions(int Level, Vector3? Position, float? Yaw, flo
     public string? Console { get; init; }
     /// <summary>After the wait: frames saved, then the game quits (--frames).</summary>
     public FrameDump? Frames { get; init; }
+    /// <summary>Test frames a second (--fps): above 60, frames are drawn between the steps.</summary>
+    public int? FrameRate { get; init; }
 }
 
 /// <summary>A roll of the 1996 demo's levels.</summary>
@@ -143,6 +145,9 @@ public sealed class Viewer : IScreen
     /// <summary>The 1996 demo, in its levels.</summary>
     private readonly BetaDemo? _beta;
     private readonly bool _test;
+    /// <summary>Frames between the steps (not the tests': their frames are steps).</summary>
+    private readonly FrameBlend _blend;
+    private readonly Blending _blending;
     private bool _flying;
     private float _time;
     private float _pending;
@@ -274,6 +279,8 @@ public sealed class Viewer : IScreen
         }
 
         _test = options.Screenshot != null || options.Frames != null;
+        _blending = _test && options.FrameRate == null ? Blending.Off : Blending.On;
+        _blend = new FrameBlend(_blending);
         ui.Window.CaptureMouse(_test ? Capture.Off : Capture.On);
         _commands = new LevelCommands(level, _kurt, _scripts, _space, SaveSlot) { Mods = _mods };
 
@@ -404,10 +411,9 @@ public sealed class Viewer : IScreen
             return Event.None;
         }
 
-        // Personal tweak: run lock (the original's SetTurbo) toggles running for Kurt and the flying camera.
-        if (input.WasPressed(Key.RunLock))
+        if (input.WasPressed(Key.AlwaysRun))
         {
-            input.RunLocked = !input.RunLocked;
+            input.ToggleRun();
         }
 
         if (input.WasPressed(Key.Fly))
@@ -439,6 +445,7 @@ public sealed class Viewer : IScreen
             QuickLoad();
         }
 
+        MouseLook(input);
         RunSteps(input, elapsed);
 
         if (_ending is { } ending)
@@ -510,6 +517,7 @@ public sealed class Viewer : IScreen
             // camera); before, it lagged a step behind on each tick: a ghost.
             UpdateCamera(input);
             input.ClearMouse();
+            _blend.Record(_kurt, Carrier(), Driven(), _scripts.TickCount);
 
             // The music follows Kurt's arena, which the scripts set (BSPShow).
             using (_ui.Dev.Profiler.Measure(Section.Audio))
@@ -562,6 +570,54 @@ public sealed class Viewer : IScreen
         }
 
         _follow.Update(_kurt, PitchGoal(), input, Step);
+    }
+
+    /// <summary>The mouse turns Kurt and tilts the camera every frame, not with the steps (screens
+    /// above 60 Hz); not the flying camera's, nor in tests (they have no mouse).</summary>
+    private void MouseLook(Input input)
+    {
+        if (_flying || _test)
+        {
+            return;
+        }
+
+        _blend.Turn(_kurt.MouseLook(input));
+        _follow.MouseLook(_kurt, input);
+    }
+
+    /// <summary>What carries Kurt, drawn with him: the XE he flies, the platform he stands on.</summary>
+    private MdkObject? Carrier()
+    {
+        var rides = _scripts.Rides;
+        if (rides.Bomber != null)
+        {
+            return rides.Ridden;
+        }
+
+        return _kurt.OnFloor ? _kurt.Platform as MdkObject : null;
+    }
+
+    /// <summary>What Kurt rides that follows him each step: the XD2, the board.</summary>
+    private MdkObject? Driven() => _scripts.Rides.Bomber == null ? _scripts.Rides.Ridden : null;
+
+    /// <summary>This frame between the last step and the next: Kurt, the objects and the cameras
+    /// as drawn.</summary>
+    private void BlendFrame()
+    {
+        var step = _pending / Step;
+        var tick = _scripts.TickBlend(_pending);
+        _blend.Update(_kurt, step, tick);
+        if (_blending == Blending.Off || _flying)
+        {
+            return;
+        }
+
+        if (CutsceneCamera.Active(_scripts))
+        {
+            _cutscene.Blend(tick);
+        }
+
+        _follow.Blend(_kurt, _blend.Feet, _blend.Yaw, step);
     }
 
     /// <summary>The tests' held keys: forward for --walk seconds, jump, fire, and use at 1 second.</summary>
@@ -627,6 +683,7 @@ public sealed class Viewer : IScreen
     /// <summary>The camera, the scene, the HUD and the sounds' listener.</summary>
     private View DrawScene(float elapsed)
     {
+        BlendFrame();
         var camera = SceneView();
         var eye = Eye();
         _mixer.ListenerPosition = camera.Position;
@@ -645,11 +702,11 @@ public sealed class Viewer : IScreen
         using var render = _ui.Dev.Profiler.Measure(Section.Scene);
         _view.Draw(_scripts.DrawnArenas, _scripts.AnimatedTextures);
         _view.DrawEnd(_scripts.EndLevel);
-        DrawObjects(_objects, _scripts, _level, _looks);
-        _ropes.Draw(_scripts.Objects);
+        DrawObjects(_objects, _scripts, _level, _looks, _blend);
+        _ropes.Draw(_scripts.Objects, _blend);
         _sniper.Draw(_kurt, _scripts, elapsed);
         _effects.Draw(_scripts, camera);
-        _sprite.Draw(_kurt, camera.Position, eye.Forward, eye.Up, eye.FieldOfView, _space);
+        _sprite.Draw(_kurt, _blend.Feet, camera.Position, eye.Forward, eye.Up, eye.FieldOfView, _space);
 
         _hud.Messages.Update(elapsed);
         _hud.Draw(HudStateOf(_kurt, _scripts, _hudSlots));
@@ -891,7 +948,7 @@ public sealed class Viewer : IScreen
     }
 
     /// <summary>The visible objects, each with its arena's palette and textures.</summary>
-    private static void DrawObjects(ObjectView view, ScriptRuntime scripts, LevelData level, Dictionary<string, ObjectView.Look> looks)
+    private static void DrawObjects(ObjectView view, ScriptRuntime scripts, LevelData level, Dictionary<string, ObjectView.Look> looks, FrameBlend blend)
     {
         foreach (var obj in scripts.Objects)
         {
@@ -900,7 +957,7 @@ public sealed class Viewer : IScreen
                 continue;
             }
 
-            view.Draw(obj, ObjectLook(level, looks, obj.Arena));
+            view.Draw(obj, ObjectLook(level, looks, obj.Arena), blend.TransformOf(obj));
         }
     }
 
@@ -973,10 +1030,11 @@ public sealed class Viewer : IScreen
     private void Trace(Vector3 camera)
     {
         var carrier = _scripts.Rides.Ridden ?? _kurt.Platform as MdkObject;
+        var at = carrier is { } drawn ? _blend.PositionOf(drawn) : Vector3.Zero;
         var on = carrier is { } c
-            ? string.Create(CultureInfo.InvariantCulture, $" on {c.TypeName} {c.Position.X:0.00} {c.Position.Y:0.00} {c.Position.Z:0.00}")
+            ? string.Create(CultureInfo.InvariantCulture, $" on {c.TypeName} {at.X:0.00} {at.Y:0.00} {at.Z:0.00}")
             : "";
-        var f = _kurt.Feet;
+        var f = _blend.Feet;
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"trace {_time:0.000} kurt {f.X:0.00} {f.Y:0.00} {f.Z:0.00} camera {camera.X:0.00} {camera.Y:0.00} {camera.Z:0.00}{on}"));
     }

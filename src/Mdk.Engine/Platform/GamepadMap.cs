@@ -15,7 +15,7 @@ public enum PadButton
 /// <code>
 ///   LT sniper   LB item ◄            RB item ►   RT fire
 ///   d-pad: ▲ zoom in, ▼ zoom out, ◄ ► items      Y item ►
-///   left stick: walk (L3 run lock)           X use   B turbo
+///   left stick: walk, L3 always run          X use   B turbo
 ///   Start: pause                                 A jump
 /// </code>
 /// In the menus: the d-pad or the left stick, A accepts, B and Start go back.</summary>
@@ -64,8 +64,7 @@ public static class GamepadMap
         PadButton.LeftTrigger => Key.Sniper,
         PadButton.South => Key.Jump,
         PadButton.East => Key.Turbo,
-        // Personal tweak: clicking the left stick toggles running.
-        PadButton.LeftStick => Key.RunLock,
+        PadButton.LeftStick => Key.AlwaysRun,
         PadButton.West => Key.UseItem,
         PadButton.North or PadButton.RightShoulder or PadButton.DpadRight => Key.ItemNext,
         PadButton.LeftShoulder or PadButton.DpadLeft => Key.ItemPrevious,

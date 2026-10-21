@@ -20,9 +20,8 @@ public enum Key
     RollLeft, RollRight, Teleport,
     /// <summary>The level's full save (the original's F2), and loading the latest save.</summary>
     QuickSave, QuickLoad,
-    /// <summary>Personal tweak: run on or off without holding <see cref="Turbo"/> (the original's
-    /// SetTurbo, <see cref="Input.RunLocked"/>).</summary>
-    RunLock,
+    /// <summary>Turbo on until pressed again; on Caps Lock, while it is locked (the original's).</summary>
+    AlwaysRun,
 }
 
 /// <summary>Keys of the menus and prompts: fixed, whatever the game's bindings.</summary>
@@ -40,6 +39,8 @@ public enum Pointer { Left, Right }
 public sealed class Input
 {
     public enum State { Up, Down }
+    /// <summary>A lock key's state (Caps Lock: its light).</summary>
+    public enum Lock { Off, On }
 
     private static readonly Dictionary<SDL_Scancode, Key> DefaultKeys = new()
     {
@@ -54,7 +55,7 @@ public sealed class Input
         [SDL_Scancode.SDL_SCANCODE_SPACE] = Key.Jump,
         [SDL_Scancode.SDL_SCANCODE_LSHIFT] = Key.Turbo,
         [SDL_Scancode.SDL_SCANCODE_RSHIFT] = Key.Turbo,
-        [SDL_Scancode.SDL_SCANCODE_CAPSLOCK] = Key.RunLock,
+        [SDL_Scancode.SDL_SCANCODE_CAPSLOCK] = Key.AlwaysRun,
         [SDL_Scancode.SDL_SCANCODE_LCTRL] = Key.Fire,
         [SDL_Scancode.SDL_SCANCODE_RCTRL] = Key.Fire,
         [SDL_Scancode.SDL_SCANCODE_RETURN] = Key.UseItem,
@@ -208,6 +209,10 @@ public sealed class Input
     private readonly Dictionary<PadButton, Key> _padKeys = [];
     /// <summary>The buttons held: a trigger, whose axis reports every move, names itself once a pull.</summary>
     private readonly HashSet<PadButton> _padHeld = [];
+    /// <summary>Turbo is held until "always run" is pressed again (<see cref="ToggleRun"/>).</summary>
+    private bool _alwaysRun;
+    /// <summary>Caps Lock's state: "always run" bound to it follows the lock, not its presses.</summary>
+    private Lock _capsLock;
 
     /// <summary>The game's degrees a mouse count turns (Kurt, the cameras): the gamepad's and the
     /// gyroscope's look in degrees becomes mouse counts.</summary>
@@ -246,14 +251,25 @@ public sealed class Input
     /// <summary>The digit (0-9) pressed this frame, or <see cref="NoDigit"/>.</summary>
     public int Digit { get; private set; } = NoDigit;
 
-    /// <summary>Personal tweak: <see cref="Key.RunLock"/> toggled running on: <see cref="Key.Turbo"/>
-    /// counts as held, and holding it walks.</summary>
-    public bool RunLocked { get; set; }
-
-    public bool IsDown(Key key) => key == Key.Turbo ? Held(key) != RunLocked : Held(key);
+    /// <summary>Personal tweak: while "always run" is on, <see cref="Key.Turbo"/> counts as held and
+    /// holding it walks (it inverts, like the original's SetTurbo).</summary>
+    public bool IsDown(Key key) => key == Key.Turbo ? Held(key) != RunsAlways : Held(key);
 
     private bool Held(Key key) =>
         _down.Contains(key) || _buttons.Contains(key) || _fly.Contains(key) || _wheel.Contains(key) || _held.Contains(key) || _touched.Contains(key) || _pad.Contains(key);
+
+    /// <summary>"Always run" is on: toggled, or Caps Lock's and locked.</summary>
+    private bool RunsAlways => _alwaysRun || CapsRuns;
+
+    /// <summary>"Always run" is Caps Lock's and the lock is on.</summary>
+    private bool CapsRuns =>
+        _capsLock == Lock.On && _keys.GetValueOrDefault(SDL_Scancode.SDL_SCANCODE_CAPSLOCK) == Key.AlwaysRun;
+
+    /// <summary>Turbo stays on, or no longer ("always run" pressed in play).</summary>
+    public void ToggleRun() => _alwaysRun = !_alwaysRun;
+
+    /// <summary>Caps Lock's state this frame (the window's keyboard).</summary>
+    internal void LockCaps(Lock state) => _capsLock = state;
 
     /// <summary>Holds or releases a key from the program (automated tests).</summary>
     public void Hold(Key key, State state)
@@ -514,6 +530,22 @@ public sealed class Input
         _wheel.Clear();
     }
 
+    /// <summary>The horizontal or vertical mouse motion, used at once (a frame's look): the next
+    /// game step sees none.</summary>
+    public float TakeMouseX()
+    {
+        var x = MouseX;
+        MouseX = 0f;
+        return x;
+    }
+
+    public float TakeMouseY()
+    {
+        var y = MouseY;
+        MouseY = 0f;
+        return y;
+    }
+
     /// <summary>Someone else has this frame's input (the console): the game sees no presses, typing,
     /// clicks or mouse, and no keyboard or mouse keys held. Keys held by the program (tests) stay.</summary>
     public void Withhold()
@@ -578,6 +610,12 @@ public sealed class Input
             }
 
             _heldKeys[scancode] = key;
+        }
+
+        // Caps Lock's "always run" follows the lock (LockCaps): its presses don't toggle.
+        if (key == Key.AlwaysRun && scancode == SDL_Scancode.SDL_SCANCODE_CAPSLOCK)
+        {
+            return;
         }
 
         if (_down.Add(key))

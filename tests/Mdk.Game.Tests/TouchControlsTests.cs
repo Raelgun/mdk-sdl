@@ -1,5 +1,8 @@
 using System.Numerics;
+using System.Reflection;
 using Mdk.Engine.Platform;
+using SDL;
+using static SDL.SDL3;
 
 namespace Mdk.Game.Tests;
 
@@ -139,5 +142,19 @@ public class TouchControlsTests
     {
         // Auto: a gamepad, a keyboard or a mouse hides them; a touch shows them again.
         Assert.Equal(shown, TouchControls.Shown(mode, last));
+    }
+
+    [Fact]
+    public void AFingersClickReleaseReachesPlay()
+    {
+        // A menu tap (SDL's left click of a finger) starts play: its release must still let go of
+        // the click, or the left button (fire) stays held (issue #6).
+        var isTouch = typeof(Window).GetMethod("IsTouch", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var up = new SDL_Event
+        {
+            button = new SDL_MouseButtonEvent { type = SDL_EventType.SDL_EVENT_MOUSE_BUTTON_UP, which = SDL_TOUCH_MOUSEID, button = (byte)SDL_BUTTON_LEFT },
+        };
+
+        Assert.False((bool)isTouch.Invoke(null, [up])!);
     }
 }

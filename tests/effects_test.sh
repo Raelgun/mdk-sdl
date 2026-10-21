@@ -8,7 +8,7 @@
 export MDK_HIDDEN=1
 # Default settings, not the player's (their difficulty changes damage).
 export MDK_USER_DIR="$(mktemp -d)"
-MDK=src/Mdk.App/bin/Debug/net10.0/mdk
+MDK=src/Mdk.App/bin/Debug/net10.0/mdk_sdl
 SHOT=${TMPDIR:-/tmp}/mdk_effects.bmp
 FAILED=0
 
@@ -40,6 +40,13 @@ echo "$OUT" | grep -q "fans 1"; check "the fan is created" $?
 Z=$(echo "$OUT" | grep "^Kurt at" | awk '{print int($5)}')
 [ "${Z:--45}" -gt 30 ]; check "Kurt rises in the updraft" $?
 echo "$OUT" | grep "^Kurt at" | grep -q " Chute "; check "his chute opens" $?
+
+# Level 3's CHMO_6 shaft: its fan (box z -397 to -236) lifts Kurt on through the floor doorway
+# into HMO_8, where the corridor is the second arena (damp_gravity 0x469efc asks it too).
+OUT=$(timeout 60 "$MDK" --level=3 --mute --screenshot="$SHOT" --teleport=CHMO_6,391,2427,-395 --delay=1 --wait=6 2>&1)
+echo "$OUT" | grep "^Kurt at"
+Z=$(echo "$OUT" | grep "^Kurt at" | awk '{print int($5)}')
+[ "${Z:--395}" -gt -240 ]; check "the shaft's fan lifts Kurt into HMO_8" $?
 
 [ $FAILED = 0 ] && echo PASSED && exit 0
 echo FAILED

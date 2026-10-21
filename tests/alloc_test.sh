@@ -9,7 +9,7 @@
 export MDK_HIDDEN=1
 # Default settings and saves, not the player's.
 export MDK_USER_DIR="$(mktemp -d)"
-MDK=src/Mdk.App/bin/Debug/net10.0/mdk
+MDK=src/Mdk.App/bin/Debug/net10.0/mdk_sdl
 SHOT=${TMPDIR:-/tmp}/mdk_alloc.bmp
 MAX=${MDK_ALLOC_MAX:-512}
 MEAT5="--level=4 --delay=0.5 --teleport=MEAT_5,-288,13559,-1989"
