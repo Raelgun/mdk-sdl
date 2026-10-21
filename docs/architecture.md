@@ -343,7 +343,8 @@ None open. Answered (Ghidra): which objects Kurt walks into or stands on
 - Wall: neither 0x10 nor 0x800 (`damp_collide_move` 0x465e34 skips `flags & 0x810`; XY only).
 - Floor: 0x100 and not 0x10 (`damp_platform_floor` 0x41d2c4).
 - 0x800000 decides neither: landed on such a platform, Kurt keeps it without the floor scan
-  (`damp_gravity` 0x469efc sets 0x573b8c).
+  (`damp_gravity` 0x469efc sets 0x573b8c): each step his XY is its XY, whatever the walls, and he
+  can't walk (`Kurt.Keeper.cs`). E.g. level 3's hover ship XGS flies him through HMO_9's opening.
 
   | flags             | walls | floor | e.g. (level)                               |
   |-------------------|-------|-------|--------------------------------------------|
@@ -378,6 +379,11 @@ None open. Answered (Ghidra): which objects Kurt walks into or stands on
    `Collision/ArenaSpace.Probes.cs`). Each step the camera follows Kurt after the scripts (a
    platform has carried him: `game_frame`'s order), and the XD2 and the XE are put with Kurt
    (`Rides.Follow`), so nothing is drawn a step apart (`tests/carry_test.sh`, `--trace`).
+   Frames between steps (screens above 60 Hz, `FrameBlend.cs`): Kurt and the follow camera are
+   drawn between the last two steps, the objects and the cutscene camera between the last two
+   ticks, by the time left over; Kurt is drawn with what carries him; teleports, arena changes
+   and cuts snap. The mouse turns Kurt and the camera (and the scope) every frame. Effects,
+   pieces, ropes and animation frames stay at the tick rate; tests' frames are steps, unblended.
 7. 🟡 Script VM and objects (`Scripts/`: ports of `script_vm.gd`, `script_runtime.gd`,
    `object_motion.gd`, `object_behaviors.gd`; 30 ticks per second, object moves are BSP box sweeps;
    the arenas' own scripts run after the objects, as in `game_frame`).

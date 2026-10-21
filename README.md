@@ -160,7 +160,7 @@ The plan is in [docs/architecture.md](docs/architecture.md#roadmap). How the ori
 
 ## Running
 
-Windows x64, Linux x64 and ARM64, and macOS (Apple silicon): one executable each, `mdk.exe` or `mdk` (see
+Windows x64, Linux x64 and ARM64, and macOS (Apple silicon): one executable each, `mdk_sdl.exe` or `mdk_sdl` (see
 [Building](#building)). It is played on Windows; the Linux and macOS builds are only built and
 started on CI so far. Put the program (or this folder) inside the MDK installation folder (for
 example `C:\GOG Games\MDK\mdk-sdl`), install MDK in the default GOG or Steam location, or set the
@@ -175,7 +175,7 @@ beta="C:/Games/MDK (1996-08-06) (beta demo)"
 
 On Linux and macOS copy the installed game's folder (from
 Windows, Wine or the GOG installer); file names match whatever their case. macOS keeps a downloaded
-program in quarantine: `xattr -d com.apple.quarantine mdk`.
+program in quarantine: `xattr -d com.apple.quarantine mdk_sdl`.
 
 ### Steam Deck
 
@@ -186,13 +186,13 @@ Deck yet. In desktop mode:
 2. Point it at the game: put the folder inside the MDK installation, or write its path into
    `mdk_paths.cfg` next to `mdk` (MDK from Steam, installed through Proton:
    `~/.local/share/Steam/steamapps/common/MDK`).
-3. Steam, "Add a Non-Steam Game", choose `mdk`; in its controller settings pick the "Gamepad"
+3. Steam, "Add a Non-Steam Game", choose `mdk_sdl`; in its controller settings pick the "Gamepad"
    layout (not "Keyboard and mouse").
 
 Then it starts from game mode too.
 
 ```
-mdk.exe
+mdk_sdl.exe
 ```
 
 - No option: the splash, then the main menu.
@@ -240,12 +240,16 @@ mdk.exe
   too when it starts in the menus), 0.1 s a frame; in a level Kurt is healed and problems print
   as `Soak problem` (`--tour`: every arena in turn during `--wait`, doors shut before each teleport).
   `--press=QuickSave@1,Menu.Accept@1.5`: presses game keys, or menu keys after `Menu.`, once at
-  those times. `--frames=dir,count[,every]`: after `--wait`, saves every Nth frame of a level (4:
-  15 a second) as `frame000.bmp`..., then quits (the animation above).
+  those times. `--frames=dir,count[,every]`: after `--wait`, saves every Nth frame of a level or
+  of the fall (4: 15 a second) as `frame000.bmp`..., then quits (the animation above). `--fps=N`:
+  test frames a second instead of 60; above 60 they are drawn between the steps (240: 4 a step). For videos:
+  `--size=2560x1440` sets the hidden frame's size (1280x960 by default), `--record-audio=file.wav`
+  saves the sound from the start (with `--mute`, in step with the frames).
 
 Settings (the options below, the mods' switches) and saved games
 are kept next to the executable (`settings.cfg`, `saves/*.sav`; `MDK_USER_DIR` overrides the
-folder). The first run copies them from where older builds kept them (`%LOCALAPPDATA%/mdk-sdl`). `LASTGAME` (written when Kurt dies) is deleted at start, as in the original.
+folder). If that folder can't be written (Program Files, a protected Steam or GOG folder), they go to
+`%APPDATA%\mdk-sdl` (Linux `~/.local/share/mdk-sdl`), mods too. The first run copies them from where older builds kept them (`%LOCALAPPDATA%/mdk-sdl`). `LASTGAME` (written when Kurt dies) is deleted at start, as in the original.
 
 ### Options
 
@@ -272,7 +276,7 @@ From the main menu or the pause menu; a page per kind, each change applied and s
 - **Mods**: each mod on or off, "Make HD textures" (desktop), "Import from folder" (Android).
 
 Gamepads (Xbox, PlayStation, Switch, Android Bluetooth pads), by default: left stick walks, right
-stick looks, RT fires, LT toggles sniper mode, A jumps, B runs (turbo), X uses the item, Y / RB /
+stick looks, RT fires, LT toggles sniper mode, A jumps, B runs (turbo), L3 always runs, X uses the item, Y / RB /
 d-pad right the next item, LB / d-pad left the previous one, d-pad up and down zoom, Start
 pauses. In the menus: d-pad or left stick, A accepts, B or Start goes back.
 
@@ -287,7 +291,7 @@ Display: 3440x1440 @ 144 Hz, window 1280x960 (windowed), render target 1280x960,
 ```
 
 Controls: W/S or Up/Down to run, A/D to strafe, the mouse or Left/Right to turn, Space to jump
-(hold it while falling to open the chute; running into a ledge while falling grabs it), Shift for turbo, Ctrl or the left mouse button to fire,
+(hold it while falling to open the chute; running into a ledge while falling grabs it), Shift for turbo (Caps Lock keeps it on while locked; another "always run" key toggles it), Ctrl or the left mouse button to fire,
 Enter or E to use the item, Tab, [ ] or the mouse wheel to select it (or 1-5), the right mouse button for sniper mode
 (the mouse wheel or PageUp/PageDown zoom, Tab or [ ] select the ammo), F1 for the flying camera (E/Q to go up and
 down), F2 for a quick save (the original's full save: the name is asked, the level's number
@@ -304,7 +308,7 @@ S the stream after LEVEL7, D the statistics with random counts).
 
 The enhanced look can draw the textures upscaled 2x by an AI upscaler, made once on your computer
 from your copy of the game: Options, Mods, "Make HD textures" (a progress page; leaving it cancels), or
-`mdk --upscale-textures` (all levels; `=3,7` only those; `--hd-model=general|anime`,
+`mdk_sdl --upscale-textures` (all levels; `=3,7` only those; `--hd-model=general|anime`,
 `--hd-scale=2|4`). They are a mod, `mods/hd-textures/` ([docs/modding.md](docs/modding.md)):
 Options, Mods, "HD textures (Real-ESRGAN)" switches them, from the next level on (enhanced look
 only; the original look is unchanged). Other mods override them.
@@ -398,7 +402,7 @@ picker; `Download` itself can't be picked, a folder in it can) and copies its ga
 saves live next to it, in `files`.
 
 Mods and HD textures: make them on a PC ([above](#hd-textures)), copy the `mods` folder (next to
-`mdk.exe`) into the phone's MDK folder, then Options, Mods, "Import from folder" and pick it again: new
+`mdk_sdl.exe`) into the phone's MDK folder, then Options, Mods, "Import from folder" and pick it again: new
 or changed files are copied, `mods` too (an older `textures-hd` becomes the HD textures mod).
 Options, Mods then switches them (enhanced look).
 
@@ -440,12 +444,12 @@ the build without those formats.
 
 ```
 dotnet build
-src/Mdk.App/bin/Debug/net10.0/mdk --level=3
+src/Mdk.App/bin/Debug/net10.0/mdk_sdl --level=3
 ```
 
 One native executable (Native AOT; also needs the Visual Studio C++ tools on Windows, clang and
 zlib on Linux, Xcode on macOS): `sh tools/publish.sh [win-x64|linux-x64|linux-arm64|osx-arm64|osx-x64]` (this
-machine's by default; `publish.bat` on Windows) gives `publish/mdk` or `publish/mdk.exe` (about 5.5 MB) and SDL3's library next to
+machine's by default; `publish.bat` on Windows) gives `publish/mdk_sdl` or `publish/mdk_sdl.exe` (about 5.5 MB) and SDL3's library next to
 it (`SDL3.dll`, `libSDL3.so`, `libSDL3.dylib`).
 
 The icon (original artwork, not the game's) is drawn by `python tools/gen_icon.py` (Pillow, numpy):

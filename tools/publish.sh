@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds the native executable publish/mdk (mdk.exe on Windows; Native AOT, the shaders embedded)
+# Builds the native executable publish/mdk_sdl (mdk_sdl.exe on Windows; Native AOT, the shaders embedded)
 # and SDL3's library next to it for a runtime, this machine's by default. Other options go to dotnet publish.
 # Needs the C/C++ linker: the Visual Studio C++ tools on Windows (vswhere is put on the PATH for
 # the AOT linker), clang on Linux, Xcode on macOS.
@@ -15,6 +15,6 @@ esac
 PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"
 export PATH
 # Only the program is replaced: settings.cfg and saves/ next to it stay.
-rm -f publish/mdk publish/mdk.exe
+rm -f publish/mdk publish/mdk.exe publish/mdk_sdl publish/mdk_sdl.exe
 dotnet publish src/Mdk.App -c Release -r "$RID" -o publish "$@" || exit 1
 ls -la publish/mdk*

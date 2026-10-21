@@ -276,14 +276,46 @@ public sealed class MdkObject : ISoundSource
 
     /// <summary>The orientation: yaw turns around Z, pitch raises the nose (+X towards +Z), roll
     /// turns around the forward axis.</summary>
-    public Matrix4x4 Rotation =>
-        Matrix4x4.CreateRotationX(float.DegreesToRadians(Roll))
-        * Matrix4x4.CreateRotationY(-float.DegreesToRadians(Pitch))
-        * Matrix4x4.CreateRotationZ(float.DegreesToRadians(Yaw));
+    public Matrix4x4 Rotation => RotationOf(Roll, Pitch, Yaw);
+
+    private static Matrix4x4 RotationOf(float roll, float pitch, float yaw) =>
+        Matrix4x4.CreateRotationX(float.DegreesToRadians(roll))
+        * Matrix4x4.CreateRotationY(-float.DegreesToRadians(pitch))
+        * Matrix4x4.CreateRotationZ(float.DegreesToRadians(yaw));
 
     /// <summary>Model space to the world (a rolling object turns by its rolling basis).</summary>
     public Matrix4x4 Transform =>
         Matrix4x4.CreateScale(Scale) * ((Flags & FlagRolling) != 0 ? RollingBasis : Rotation) * Matrix4x4.CreateTranslation(Position + Vector3.UnitZ * Lift);
+
+    /// <summary>The pose at the start of the last tick (<see cref="Remember"/>); null: none yet.</summary>
+    private (Vector3 Position, float Yaw, float Pitch, float Roll, string Arena)? _ticked;
+
+    /// <summary>A tick starts: frames until the next are drawn from this pose to the tick's.</summary>
+    public void Remember() => _ticked = (Position, Yaw, Pitch, Roll, Arena);
+
+    /// <summary>Whether frames draw it between ticks: not when new, after a jump or in another arena.</summary>
+    private bool Blends(float alpha) =>
+        alpha < 1f && _ticked is { } from && from.Arena == Arena && !FrameBlend.Jumped(from.Position, Position, ScriptRuntime.Tick);
+
+    /// <summary>The place, yaw and transform <paramref name="alpha"/> of the way from the last
+    /// tick's start to now (a frame between ticks; a rolling object keeps its basis).</summary>
+    public Vector3 PositionAt(float alpha) => Blends(alpha) ? FrameBlend.Lerp(_ticked!.Value.Position, Position, alpha) : Position;
+
+    public float YawAt(float alpha) => Blends(alpha) ? FrameBlend.LerpAngle(_ticked!.Value.Yaw, Yaw, alpha) : Yaw;
+
+    public Matrix4x4 TransformAt(float alpha)
+    {
+        if (!Blends(alpha))
+        {
+            return Transform;
+        }
+
+        var from = _ticked!.Value;
+        var rotation = (Flags & FlagRolling) != 0
+            ? RollingBasis
+            : RotationOf(FrameBlend.LerpAngle(from.Roll, Roll, alpha), FrameBlend.LerpAngle(from.Pitch, Pitch, alpha), FrameBlend.LerpAngle(from.Yaw, Yaw, alpha));
+        return Matrix4x4.CreateScale(Scale) * rotation * Matrix4x4.CreateTranslation(PositionAt(alpha) + Vector3.UnitZ * Lift);
+    }
 
     /// <summary>A rolling object rests on its origin but its model is lifted by the height offset
     /// (0x43b65c: z + obj+0x5c), e.g. LEVEL6's centred boulder XBO by 5 of its 5.15 radius.</summary>

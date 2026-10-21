@@ -99,6 +99,10 @@ public sealed unsafe class AudioDevice : IDisposable
     private (float Left, float Right) _filtered;
     private readonly Limiter _limiter = new(OutputRate);
     private int _nextId = 1;
+    /// <summary>Output frames owed without a device (a frame's 1/60 s is 735 of them, not 734).</summary>
+    private double _owed;
+    /// <summary>The mix saved as a WAV (<see cref="Record"/>), or null.</summary>
+    private BinaryWriter? _recording;
 
     /// <summary>The volume of everything (0-1).</summary>
     public float MasterGain { get; set; } = 1f;
@@ -210,9 +214,11 @@ public sealed unsafe class AudioDevice : IDisposable
     public void Update(float delta)
     {
         var bytesPerFrame = OutputChannels * sizeof(float);
+        _owed += OutputRate * (double)delta;
         var frames = _stream == null
-            ? (int)(OutputRate * delta)
+            ? (int)_owed
             : (int)(OutputRate * QueueSeconds) - SDL_GetAudioStreamQueued(_stream) / bytesPerFrame;
+        _owed -= _stream == null ? frames : _owed;
         if (frames <= 0)
         {
             return;
@@ -245,6 +251,10 @@ public sealed unsafe class AudioDevice : IDisposable
 
         AddMusic(mix, music, frames);
         _limiter.Process(mix);
+        foreach (var sample in mix)
+        {
+            _recording?.Write(sample);
+        }
 
         if (_stream == null)
         {
@@ -342,8 +352,46 @@ public sealed unsafe class AudioDevice : IDisposable
         return (sound.Samples[frame * 2], sound.Samples[frame * 2 + 1]);
     }
 
+    /// <summary>Saves the mix from now on as a stereo float WAV at <paramref name="path"/> (with
+    /// <see cref="Output.Muted"/>: in step with the frames; --record-audio, videos).</summary>
+    public void Record(string path)
+    {
+        _recording = new BinaryWriter(File.Create(path));
+        _recording.Write(new byte[WavHeader]);
+    }
+
+    private const int WavHeader = 44;
+    private const ushort FloatFormat = 3;
+
+    /// <summary>The RIFF header, now that the data's size is known.</summary>
+    private void EndRecording()
+    {
+        if (_recording is not { } w)
+        {
+            return;
+        }
+
+        var data = (int)w.BaseStream.Length - WavHeader;
+        w.Seek(0, SeekOrigin.Begin);
+        w.Write("RIFF"u8);
+        w.Write(data + WavHeader - 8);
+        w.Write("WAVEfmt "u8);
+        w.Write(16);
+        w.Write(FloatFormat);
+        w.Write((ushort)OutputChannels);
+        w.Write(OutputRate);
+        w.Write(OutputRate * OutputChannels * sizeof(float));
+        w.Write((ushort)(OutputChannels * sizeof(float)));
+        w.Write((ushort)(sizeof(float) * 8));
+        w.Write("data"u8);
+        w.Write(data);
+        w.Dispose();
+        _recording = null;
+    }
+
     public void Dispose()
     {
+        EndRecording();
         if (_stream != null)
         {
             SDL_DestroyAudioStream(_stream);

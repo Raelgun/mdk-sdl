@@ -8,7 +8,7 @@
 export MDK_HIDDEN=1
 # Default settings and saves, not the player's.
 export MDK_USER_DIR="$(mktemp -d)"
-MDK=src/Mdk.App/bin/Debug/net10.0/mdk
+MDK=src/Mdk.App/bin/Debug/net10.0/mdk_sdl
 SHOT=${TMPDIR:-/tmp}/mdk_console.bmp
 FAILED=0
 

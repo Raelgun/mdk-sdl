@@ -36,7 +36,7 @@ public sealed class Settings
     [
         (Key.Forward, "Forward"), (Key.Back, "Back"), (Key.TurnLeft, "Turn left"), (Key.TurnRight, "Turn right"),
         (Key.StrafeLeft, "Strafe left"), (Key.StrafeRight, "Strafe right"), (Key.Jump, "Jump"), (Key.Turbo, "Run"),
-        (Key.Fire, "Fire"), (Key.Sniper, "Sniper mode"), (Key.ZoomIn, "Zoom in"), (Key.ZoomOut, "Zoom out"),
+        (Key.AlwaysRun, "Always run"), (Key.Fire, "Fire"), (Key.Sniper, "Sniper mode"), (Key.ZoomIn, "Zoom in"), (Key.ZoomOut, "Zoom out"),
         (Key.UseItem, "Use item"), (Key.ItemNext, "Next item"), (Key.ItemPrevious, "Previous item"),
         (Key.QuickSave, "Quick save"), (Key.QuickLoad, "Quick load"),
     ];

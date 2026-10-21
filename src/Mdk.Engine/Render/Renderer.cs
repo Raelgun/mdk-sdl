@@ -282,6 +282,7 @@ public sealed unsafe partial class Renderer : IDisposable
     /// the game ends): their ids are reused.</summary>
     public void Release(Scope scope)
     {
+        FlushUploads();
         SDL_WaitForGPUIdle(_device);
         ReleaseColoursFrom(scope.Textures);
         for (var i = _textures.Count - 1; i >= scope.Textures; i--)
@@ -661,19 +662,10 @@ public sealed unsafe partial class Renderer : IDisposable
         var buffer = SDL_CreateGPUBuffer(_device, &bufferInfo);
         Check(buffer != null, "SDL_CreateGPUBuffer");
 
-        var transfer = CreateTransfer(size, SDL_GPUTransferBufferUsage.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD);
-        var mapped = SDL_MapGPUTransferBuffer(_device, transfer, false);
-        MemoryMarshal.AsBytes(vertices.AsSpan()).CopyTo(new Span<byte>((void*)mapped, (int)size));
-        SDL_UnmapGPUTransferBuffer(_device, transfer);
-
-        var commands = SDL_AcquireGPUCommandBuffer(_device);
-        var copy = SDL_BeginGPUCopyPass(commands);
-        var source = new SDL_GPUTransferBufferLocation { transfer_buffer = transfer };
+        var copy = UploadPass(MemoryMarshal.AsBytes(vertices.AsSpan()), out var transfer, out var offset);
+        var source = new SDL_GPUTransferBufferLocation { transfer_buffer = transfer, offset = offset };
         var destination = new SDL_GPUBufferRegion { buffer = buffer, size = size };
         SDL_UploadToGPUBuffer(copy, &source, &destination, false);
-        SDL_EndGPUCopyPass(copy);
-        SDL_SubmitGPUCommandBuffer(commands);
-        SDL_ReleaseGPUTransferBuffer(_device, transfer);
 
         _buffers.Add((IntPtr)buffer);
         return _buffers.Count - 1;
@@ -796,9 +788,10 @@ public sealed unsafe partial class Renderer : IDisposable
     public void Present(View view, Vector4 clearColour, string? screenshot = null)
     {
         Overlay?.Invoke();
+        FlushUploads();
         var commands = SDL_AcquireGPUCommandBuffer(_device);
         SDL_GPUTexture* swapchain = null;
-        uint width = HiddenWidth, height = HiddenHeight;
+        uint width = (uint)HiddenSize.Width, height = (uint)HiddenSize.Height;
 
         // A hidden window has no swapchain to show: the frame stays in the offscreen target.
         var shown = _window.Visibility == Visibility.Shown;
@@ -926,7 +919,7 @@ public sealed unsafe partial class Renderer : IDisposable
     /// <summary>The largest texture side every backend takes.</summary>
     private const uint MaxTargetSide = 16384;
 
-    /// <summary>The render scale (%) of a shown window; a hidden one always draws 1280 x 960.</summary>
+    /// <summary>The render scale (%) of a shown window; a hidden one draws <see cref="HiddenSize"/>.</summary>
     public int RenderScale { get; set; } = FullScale;
 
     private uint Scaled(uint side) => Math.Clamp(side * (uint)RenderScale / FullScale, 1u, MaxTargetSide);
@@ -977,8 +970,10 @@ public sealed unsafe partial class Renderer : IDisposable
         format.ToString().Replace("SDL_GPU_TEXTUREFORMAT_", "", StringComparison.Ordinal);
 
     /// <summary>The offscreen frame of a hidden window (the shown one's default size).</summary>
-    private const uint HiddenWidth = 1280;
-    private const uint HiddenHeight = 960;
+    public static readonly Resolution DefaultHiddenSize = new(1280, 960);
+
+    /// <summary>The frame size of a hidden window (--size; tests, videos).</summary>
+    public Resolution HiddenSize { get; set; } = DefaultHiddenSize;
 
     /// <summary>The cameras' and the canvas' aspect: the frame's, or an eye's half in full side by side.</summary>
     public float AspectRatio => StereoModes.EyeAspect(StereoMode, _targetHeight == 0 ? 4f / 3f : (float)_targetWidth / _targetHeight);
@@ -1199,14 +1194,6 @@ public sealed unsafe partial class Renderer : IDisposable
         return SDL_CreateGPUTransferBuffer(_device, &info);
     }
 
-    /// <summary>The upload buffer, now holding <paramref name="data"/> (unmapped).</summary>
-    private SDL_GPUTransferBuffer* Staging(ReadOnlySpan<byte> data)
-    {
-        data.CopyTo(MapStaging(data.Length, out var transfer, out _));
-        SDL_UnmapGPUTransferBuffer(_device, transfer);
-        return transfer;
-    }
-
     /// <summary>Uploads up to this size go through one kept buffer, grown to the largest (cycled:
     /// uploads still pending keep theirs); larger ones (a level's first frame) through a buffer of
     /// their own, released by the caller when temporary.</summary>
@@ -1242,23 +1229,92 @@ public sealed unsafe partial class Renderer : IDisposable
 
     private void Upload(SDL_GPUTexture* texture, uint width, uint height, byte[] pixels)
     {
-        var transfer = Staging(pixels);
-        var temporary = pixels.Length > StagingKeep;
-        var commands = SDL_AcquireGPUCommandBuffer(_device);
-        var copy = SDL_BeginGPUCopyPass(commands);
-        var source = new SDL_GPUTextureTransferInfo { transfer_buffer = transfer, pixels_per_row = width, rows_per_layer = height };
+        var copy = UploadPass(pixels, out var transfer, out var offset);
+        var source = new SDL_GPUTextureTransferInfo { transfer_buffer = transfer, offset = offset, pixels_per_row = width, rows_per_layer = height };
         var destination = new SDL_GPUTextureRegion { texture = texture, w = width, h = height, d = 1 };
         SDL_UploadToGPUTexture(copy, &source, &destination, false);
-        SDL_EndGPUCopyPass(copy);
-        SDL_SubmitGPUCommandBuffer(commands);
-        if (temporary)
+    }
+
+    /// <summary>Texture and mesh uploads share one command buffer and one upload buffer, submitted
+    /// when it's full and before each frame. A level's thousands of uploads, each submitted on its
+    /// own (a fence) through a cycled buffer (a copy of it), outran the GPU and ran out of memory
+    /// (Vulkan on NVIDIA: VK_ERROR_OUT_OF_HOST_MEMORY).
+    /// <code>
+    ///   Upload ─► [batch: copy, copy, …] ──full / frame──► submit, wait for the batch before
+    /// </code></summary>
+    private const uint UploadBatchSize = 4 << 20;
+    /// <summary>Uploads start at multiples of this (D3D12's texture placement alignment).</summary>
+    private const uint UploadAlignment = 512;
+
+    private SDL_GPUTransferBuffer* _uploadBuffer;
+    private SDL_GPUCommandBuffer* _uploadCommands;
+    private SDL_GPUCopyPass* _uploadCopy;
+    private uint _uploadUsed;
+    private SDL_GPUFence* _uploadFence;
+
+    /// <summary>The batch's copy pass, <paramref name="data"/> copied to <paramref name="transfer"/>
+    /// at <paramref name="offset"/>; a larger upload gets a buffer of its own, freed once done.</summary>
+    private SDL_GPUCopyPass* UploadPass(ReadOnlySpan<byte> data, out SDL_GPUTransferBuffer* transfer, out uint offset)
+    {
+        var size = (uint)data.Length;
+        offset = (_uploadUsed + UploadAlignment - 1) / UploadAlignment * UploadAlignment;
+        if (size <= UploadBatchSize && offset + size > UploadBatchSize)
         {
-            SDL_ReleaseGPUTransferBuffer(_device, transfer);
+            FlushUploads();
+            offset = 0;
         }
+
+        if (_uploadCommands == null)
+        {
+            _uploadCommands = SDL_AcquireGPUCommandBuffer(_device);
+            _uploadCopy = SDL_BeginGPUCopyPass(_uploadCommands);
+        }
+
+        if (size > UploadBatchSize)
+        {
+            offset = 0;
+            transfer = CreateTransfer(size, SDL_GPUTransferBufferUsage.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD);
+            data.CopyTo(new Span<byte>((void*)SDL_MapGPUTransferBuffer(_device, transfer, false), data.Length));
+            SDL_UnmapGPUTransferBuffer(_device, transfer);
+            SDL_ReleaseGPUTransferBuffer(_device, transfer);
+            return _uploadCopy;
+        }
+
+        if (_uploadBuffer == null)
+        {
+            _uploadBuffer = CreateTransfer(UploadBatchSize, SDL_GPUTransferBufferUsage.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD);
+        }
+
+        // A new batch cycles off the buffer the GPU may still read; later uploads add to it.
+        transfer = _uploadBuffer;
+        var mapped = (byte*)SDL_MapGPUTransferBuffer(_device, transfer, offset == 0);
+        data.CopyTo(new Span<byte>(mapped + offset, data.Length));
+        SDL_UnmapGPUTransferBuffer(_device, transfer);
+        _uploadUsed = offset + size;
+        return _uploadCopy;
+    }
+
+    /// <summary>Submits the batch, then waits for the one before: at most two on the GPU.</summary>
+    private void FlushUploads()
+    {
+        if (_uploadCommands == null)
+        {
+            return;
+        }
+
+        SDL_EndGPUCopyPass(_uploadCopy);
+        var fence = SDL_SubmitGPUCommandBufferAndAcquireFence(_uploadCommands);
+        WaitFor(_uploadFence);
+        _uploadFence = fence;
+        _uploadCommands = null;
+        _uploadCopy = null;
+        _uploadUsed = 0;
     }
 
     public void Dispose()
     {
+        FlushUploads();
+        WaitFor(_uploadFence);
         WaitFor(_lastFrame);
         SDL_WaitForGPUIdle(_device);
         foreach (var texture in _textures)
@@ -1292,6 +1348,11 @@ public sealed unsafe partial class Renderer : IDisposable
         if (_staging != null)
         {
             SDL_ReleaseGPUTransferBuffer(_device, _staging);
+        }
+
+        if (_uploadBuffer != null)
+        {
+            SDL_ReleaseGPUTransferBuffer(_device, _uploadBuffer);
         }
 
         SDL_ReleaseGPUSampler(_device, _repeatSampler);

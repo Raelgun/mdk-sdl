@@ -83,6 +83,33 @@ public class SniperTests
     }
 
     [Fact]
+    public void LosingALockKeepsTheZoom()
+    {
+        // Zoomed past 0.25 on a locked target; the lock is lost (the limit is 0.25 again) while
+        // zooming in: the zoom stays, it doesn't jump back out.
+        var scope = new Scope { ZoomLimit = Scope.LockLimit(10f, 300f) };
+        for (var i = 0; i < 40; i++)
+        {
+            scope.UpdateZoom(-1f, Tick);
+        }
+
+        var deep = scope.Zoom;
+        Assert.True(deep < Scope.ZoomMin);
+
+        scope.ZoomLimit = Scope.ZoomMin;
+        scope.UpdateZoom(-1f, Tick);
+        Assert.Equal(deep, scope.Zoom, 5);
+
+        // Zooming out still works (once the zoom-in speed is spent).
+        for (var i = 0; i < 30; i++)
+        {
+            scope.UpdateZoom(1f, Tick);
+        }
+
+        Assert.True(scope.Zoom > deep);
+    }
+
+    [Fact]
     public void WheelNotchZoomsLikeAHeldKey()
     {
         var wheel = new Scope();

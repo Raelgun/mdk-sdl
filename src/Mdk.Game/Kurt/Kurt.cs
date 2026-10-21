@@ -118,6 +118,13 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
     private int _jumpTicksLeft;
     private bool _jumpReleased = true;
 
+    /// <summary>How the last step turned Kurt by the mouse: a frame turns him so at once.</summary>
+    private enum MouseTurn { None, Walk, Scope }
+    private MouseTurn _mouseTurn;
+
+    /// <summary>Counts the teleports: a frame draws him where he is, not on the way there.</summary>
+    public int Teleports { get; private set; }
+
     public Vector3 Facing => new(MathF.Cos(float.DegreesToRadians(Yaw)), MathF.Sin(float.DegreesToRadians(Yaw)), 0f);
 
     public Vector3 Right => new(Facing.Y, -Facing.X, 0f);
@@ -128,6 +135,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
     /// <summary>One step of <paramref name="delta"/> seconds.</summary>
     public void Update(Input input, float delta)
     {
+        _mouseTurn = MouseTurn.None;
         Invulnerable = MathF.Max(Invulnerable - delta, 0f);
         ChuteClosing = false;
         if (Frozen)
@@ -160,6 +168,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
             // No knock-down, chute or ledges while riding.
             KnockDamage = 0f;
             StopChuteSound();
+            _keeper = null;
             Ride(input, delta);
             return;
         }
@@ -191,11 +200,12 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
         }
 
         UpdateTurning(input, turbo, delta);
+        CheckKeeper();
 
-        // Throwing or knocked down, he doesn't walk.
+        // Throwing, knocked down or kept by a platform, he doesn't walk.
         var forward = Axis(input, Key.Forward, Key.Back);
         var strafe = Walking == Walk.Riding ? 0f : Axis(input, Key.StrafeRight, Key.StrafeLeft);
-        if (Current is State.Throw or State.Knocked or State.GetUp)
+        if (Current is State.Throw or State.Knocked or State.GetUp || Kept)
         {
             forward = 0f;
             strafe = 0f;
@@ -222,6 +232,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
         }
 
         UpdateVertical(input, move, delta);
+        StayOnKeeper();
         UpdateTouched();
         if (Current == State.HardLand || GrabLedge(before, forward))
         {
@@ -240,11 +251,13 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
         // The chute closes silently.
         ChuteOpen = false;
         StopChuteSound();
+        _keeper = null;
         Feet = feet;
         Yaw = yaw;
         ForwardSpeed = 0f;
         StrafeSpeed = 0f;
         VerticalSpeed = 0f;
+        Teleports++;
     }
 
     /// <summary>Moves Kurt by <paramref name="offset"/> (horizontal) with collision, sliding along
@@ -318,6 +331,31 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
         }
 
         Yaw += TurnRate * delta - input.MouseX * MouseDegrees;
+        _mouseTurn = MouseTurn.Walk;
+    }
+
+    /// <summary>A frame's mouse turn (and the scope's tilt), at once rather than with the next step
+    /// (screens above 60 Hz), where the last step turned him by the mouse. Returns the yaw change
+    /// in degrees.</summary>
+    public float MouseLook(Input input)
+    {
+        if (_mouseTurn == MouseTurn.Walk)
+        {
+            var turn = -input.TakeMouseX() * MouseDegrees;
+            Yaw += turn;
+            return turn;
+        }
+
+        if (_mouseTurn != MouseTurn.Scope)
+        {
+            return 0f;
+        }
+
+        // The mouse's share of the scope's look: no keys, no time.
+        var mouse = new Vector2(input.TakeMouseX(), input.TakeMouseY()) * MouseDegrees;
+        var scope = Scope.Look(0f, 0f, mouse, Scope.Turbo.Off, 0f);
+        Yaw += scope;
+        return scope;
     }
 
     /// <summary>Towards <c>input × max speed</c>, or friction without input (vel_accel,
@@ -469,7 +507,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
     {
         var before = Feet;
         var dz = VerticalSpeed * delta;
-        var platform = FindPlatform(dz);
+        var platform = KeptPlatform(dz) ?? FindPlatform(dz);
         if (platform is { } below)
         {
             dz = below.Top + PlatformLift - Feet.Z;
@@ -482,6 +520,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
         {
             Feet = Feet with { Z = on.Top };
             Platform = on.Owner;
+            KeepOn(on.Owner);
             Land(before, Vector3.UnitZ, delta);
             return;
         }
