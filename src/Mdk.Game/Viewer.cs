@@ -189,7 +189,7 @@ public sealed class Viewer : IScreen
         var surfaces = new MaterialResolver(renderer, level.Dti, EnhancedLook.Surfaces(graphics), mods);
         Preload(surfaces, level);
         _view = new LevelView(renderer, level, groups, EnhancedLook.Surfaces(graphics), surfaces);
-        var bank = _beta != null ? SoundBank.ForBeta(_beta, options.Level) : SoundBank.ForLevel(data, options.Level);
+        var bank = _beta != null ? SoundBank.ForBeta(_beta, options.Level) : SoundBank.ForLevel(data, options.Level, level.Arenas);
         bank.Preload();
         _mixer = new SoundMixer(_audio, bank.Get);
         var cmi = _beta != null
