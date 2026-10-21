@@ -125,8 +125,7 @@ public sealed class FollowCamera(ArenaSpace? space = null)
         }
 
         _lookOffset = Math.Clamp(_lookOffset, MinPitch - _arenaPitch - _airPitch, MaxPitch - _arenaPitch - _airPitch);
-        var degrees = _arenaPitch + _lookOffset + _airPitch - ClimbPitch * _climb + kurt.CameraTilt;
-        var pitch = float.DegreesToRadians(Math.Clamp(degrees, -ViewPitchLimit, ViewPitchLimit));
+        var pitch = ViewPitch(_arenaPitch + _lookOffset + _airPitch - ClimbPitch * _climb + kurt.CameraTilt);
         var facing = kurt.Facing;
         Position = Point(kurt.Feet, facing, pitch, kurt.CameraPivot);
         if (space != null && !kurt.Sniping && !kurt.Frozen && kurt.Current != Kurt.State.Dead)
@@ -142,6 +141,10 @@ public sealed class FollowCamera(ArenaSpace? space = null)
         _previousAim = _previousAim == null ? aim : _aim;
         _aim = aim;
     }
+
+    /// <summary>The view's pitch (radians) for <paramref name="degrees"/> down, short of straight up or
+    /// down: at 90° the view's up has no way to point, and the float cosine's sign turned it over.</summary>
+    private static float ViewPitch(float degrees) => float.DegreesToRadians(Math.Clamp(degrees, -ViewPitchLimit, ViewPitchLimit));
 
     /// <summary>Looks along <paramref name="facing"/>, <paramref name="pitch"/> (radians) down.</summary>
     private void Orient(Vector3 facing, float pitch)
@@ -185,7 +188,7 @@ public sealed class FollowCamera(ArenaSpace? space = null)
             return;
         }
 
-        var pitch = float.DegreesToRadians(FrameBlend.Lerp(from.Pitch, _aim.Pitch, alpha) + _lookOffset);
+        var pitch = ViewPitch(FrameBlend.Lerp(from.Pitch, _aim.Pitch, alpha) + _lookOffset);
         Position = Point(feet, facing, pitch, FrameBlend.Lerp(from.Pivot, _aim.Pivot, alpha));
         Orient(facing, pitch);
         Turn(ShakeOffset * float.DegreesToRadians(FieldOfView) / ViewHeight, float.DegreesToRadians(FrameBlend.Lerp(from.Roll, _aim.Roll, alpha)));

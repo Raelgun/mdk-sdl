@@ -76,4 +76,17 @@ public class CameraTests
         var ahead = Vector3.Dot(camera.Forward, kurt.Facing);
         Assert.True(ahead > MinAhead, $"forward {camera.Forward}, facing {kurt.Facing}");
     }
+
+    [Theory]
+    [InlineData(FullLook)]
+    [InlineData(-FullLook)]
+    public void FramesBetweenStepsStayUprightLookingFullyUpOrDown(float mouseDown)
+    {
+        // The frames drawn between steps (above 60 Hz) place the camera again: looking all the way
+        // down they turned the view over, and Kurt jumped from the middle to the top of the screen.
+        var (camera, kurt, _) = CameraAfter(0f, 3f, mouseDown);
+        camera.Blend(kurt, kurt.Feet, kurt.Yaw, 1f);
+        var ahead = Vector3.Dot(camera.Forward, kurt.Facing);
+        Assert.True(ahead > MinAhead, $"forward {camera.Forward}, facing {kurt.Facing}");
+    }
 }
