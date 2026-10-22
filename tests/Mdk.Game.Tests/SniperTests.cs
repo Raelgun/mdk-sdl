@@ -336,6 +336,38 @@ public class SniperTests
     }
 
     [DataFact]
+    public void AmmoKeysPickTheirRoundsWhenThereAreAny()
+    {
+        // Personal tweak: a round type's key selects it at once, if Kurt has rounds of it.
+        var kurt = StandingKurt();
+        var health = Inventory.MaxHealth;
+        kurt.Inventory.Collect("SW_HGREN", ref health);
+        var input = new Input();
+        input.Hold(Key.Sniper, Input.State.Down);
+        kurt.Update(input, Step);
+        Assert.True(kurt.Sniping);
+        input.Hold(Key.Sniper, Input.State.Up);
+
+        void Tap(Key key)
+        {
+            input.Hold(key, Input.State.Down);
+            kurt.Update(input, Step);
+            input.Hold(key, Input.State.Up);
+            kurt.Update(input, Step);
+        }
+
+        Tap(Key.Ammo1);
+        Assert.Equal(Scope.Bullets, kurt.Inventory.SelectedAmmo);
+
+        Tap(Key.Ammo4);
+        Assert.Equal(3, kurt.Inventory.SelectedAmmo);
+
+        // No sniper grenades: the key does nothing.
+        Tap(Key.Ammo3);
+        Assert.Equal(3, kurt.Inventory.SelectedAmmo);
+    }
+
+    [DataFact]
     public void ReboundWheelDoesntZoomRightAfterTheSniperKey()
     {
         var kurt = StandingKurt();

@@ -177,6 +177,25 @@ public class InputTests
     private static void Release(Input input, SDL_Scancode scancode) => input.SetKey(scancode, Input.State.Up, Repeat.No);
 
     [Fact]
+    public void NumberKeysPickRoundsInTheScopeAndItemsOnFoot()
+    {
+        // Personal tweak: 1-6 are the scope's round keys; on foot 1-5 still pick item slots.
+        var input = NewInput();
+        Press(input, SDL_Scancode.SDL_SCANCODE_3);
+        Assert.True(input.IsDown(Key.Item3));
+        Assert.False(input.IsDown(Key.Ammo3));
+        Release(input, SDL_Scancode.SDL_SCANCODE_3);
+
+        input.Scoped = true;
+        Press(input, SDL_Scancode.SDL_SCANCODE_3);
+        Assert.True(input.IsDown(Key.Ammo3));
+        Assert.False(input.IsDown(Key.Item3));
+        Press(input, SDL_Scancode.SDL_SCANCODE_6);
+        Assert.True(input.IsDown(Key.Ammo6));
+        Assert.Equal("6", input.Describe(Key.Ammo6));
+    }
+
+    [Fact]
     public void ZoomKeysKeepTheirDefaultsEverywhere()
     {
         var input = NewInput();

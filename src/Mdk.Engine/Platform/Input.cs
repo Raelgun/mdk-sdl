@@ -22,6 +22,10 @@ public enum Key
     QuickSave, QuickLoad,
     /// <summary>Turbo on until pressed again; on Caps Lock, while it is locked (the original's).</summary>
     AlwaysRun,
+    /// <summary>Personal tweak: in the scope, each sniper round type at once (normal bullets, homing,
+    /// grenade, homing grenade, mortar, Bones' air strike), as Next item would cycle to it. Fixed on
+    /// 1-6, not on the controls screen, like the item slots' keys.</summary>
+    Ammo1, Ammo2, Ammo3, Ammo4, Ammo5, Ammo6,
 }
 
 /// <summary>Keys of the menus and prompts: fixed, whatever the game's bindings.</summary>
@@ -81,7 +85,7 @@ public sealed class Input
         [SDL_Scancode.SDL_SCANCODE_F9] = Key.QuickLoad,
     };
 
-    /// <summary>The scope's own bindings (its zoom): they apply while <see cref="Scoped"/>, and anywhere
+    /// <summary>The scope's own bindings (its zoom, and its rounds): they apply while <see cref="Scoped"/>, and anywhere
     /// else a key has no binding of its own. A key can be bound to a scope action and to another one:
     /// the scope's wins while sniping, the other one wins otherwise.</summary>
     private static readonly Dictionary<SDL_Scancode, Key> DefaultScopeKeys = new()
@@ -90,6 +94,13 @@ public sealed class Input
         [SDL_Scancode.SDL_SCANCODE_EQUALS] = Key.ZoomIn,
         [SDL_Scancode.SDL_SCANCODE_PAGEDOWN] = Key.ZoomOut,
         [SDL_Scancode.SDL_SCANCODE_MINUS] = Key.ZoomOut,
+        // Personal tweak: 1-6 pick the sniper rounds in the scope (on foot 1-5 still pick item slots).
+        [SDL_Scancode.SDL_SCANCODE_1] = Key.Ammo1,
+        [SDL_Scancode.SDL_SCANCODE_2] = Key.Ammo2,
+        [SDL_Scancode.SDL_SCANCODE_3] = Key.Ammo3,
+        [SDL_Scancode.SDL_SCANCODE_4] = Key.Ammo4,
+        [SDL_Scancode.SDL_SCANCODE_5] = Key.Ammo5,
+        [SDL_Scancode.SDL_SCANCODE_6] = Key.Ammo6,
     };
 
     /// <summary>The flying camera's keys: fixed, whatever the bindings (E also uses items).</summary>
@@ -363,7 +374,7 @@ public sealed class Input
 
     /// <summary>The actions only the scope uses: its bindings are a layer of their own, so a key can
     /// zoom while sniping and do something else (walk) otherwise.</summary>
-    private static bool IsScopeAction(Key key) => key is Key.ZoomIn or Key.ZoomOut;
+    private static bool IsScopeAction(Key key) => key is Key.ZoomIn or Key.ZoomOut or (>= Key.Ammo1 and <= Key.Ammo6);
 
     /// <summary>The action of a key: the scope's binding first while sniping, else the other one first.</summary>
     private bool TryResolve(SDL_Scancode scancode, out Key key) =>

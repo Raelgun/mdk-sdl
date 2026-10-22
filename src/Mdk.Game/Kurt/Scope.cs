@@ -226,10 +226,13 @@ public sealed class Scope
 
     /// <summary>The next (<paramref name="step"/> 1) or previous (-1) ammo type with rounds
     /// (0x46c900); the clip reloads.</summary>
-    public void SelectAmmo(Inventory inventory, int step)
+    public void SelectAmmo(Inventory inventory, int step) => SelectType(inventory, inventory.NextAmmo(step));
+
+    /// <summary>Personal tweak: a round type at once (0 normal bullets, 1-5), if Kurt has rounds of
+    /// it; the clip reloads.</summary>
+    public void SelectType(Inventory inventory, int type)
     {
-        var type = inventory.NextAmmo(step);
-        if (type == inventory.SelectedAmmo)
+        if (type == inventory.SelectedAmmo || (type != Bullets && inventory.Ammo[type - 1] <= 0))
         {
             return;
         }

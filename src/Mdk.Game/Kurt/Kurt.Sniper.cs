@@ -173,7 +173,18 @@ public sealed partial class Kurt
         {
             Scope.SelectAmmo(Inventory, -1);
         }
+
+        // Personal tweak: each round type has a key of its own (1-6 by default).
+        for (var type = 0; type < AmmoKeys.Length; type++)
+        {
+            if (Pressed(input, AmmoKeys[type]))
+            {
+                Scope.SelectType(Inventory, type);
+            }
+        }
     }
+
+    private static readonly Key[] AmmoKeys = [Key.Ammo1, Key.Ammo2, Key.Ammo3, Key.Ammo4, Key.Ammo5, Key.Ammo6];
 
     /// <summary>Kurt sidesteps at a quarter of the running speed and still falls.</summary>
     private void SniperMove(Input input, bool turbo, float delta)
