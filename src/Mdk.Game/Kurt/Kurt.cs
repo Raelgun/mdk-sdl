@@ -53,6 +53,14 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
     private const float JumpReleasePenalty = 3.333f;
     /// <summary>Falling faster than this starts the fall (or with jump held, opens the chute).</summary>
     private const float FallStartSpeed = -16f;
+    /// <summary>The jumps' frames (0x4646a4): the first ones play one a tick, then frame n waits for the
+    /// vertical speed to drop to <see cref="JumpSpeeds"/>[n]; past the last comes the fall.</summary>
+    private const int JumpTimedFrames = 10;
+    private const int JumpFrames = 16;
+    private const int RunJumpTimedFrames = 7;
+    private const int RunJumpFrames = 12;
+    /// <summary>The jumps' frame speeds (0x492030; the running jump's 0x492074 is the same to frame 12).</summary>
+    private static readonly float[] JumpSpeeds = [25f, 26f, 27f, 20f, 15f, 13f, 9f, 6.6f, 4f, 0.2f, -3f, -6.3f, -10f, -14f, -17f, -20f];
     private const float ChuteGravity = 21.33f;
     private const float ChuteFallSpeed = -8f;
     private const float ChuteBrake = 256f;
@@ -419,7 +427,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
     }
 
     /// <summary>In the air: the jump's hold time runs out; held jump opens the chute when falling
-    /// fast, letting go closes it.</summary>
+    /// fast or past a jump's top, letting go closes it.</summary>
     private void UpdateAir(bool jumpHeld, float delta)
     {
         if (_jumpTicksLeft > 0)
@@ -427,7 +435,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
             _jumpTicksLeft = Math.Max(0, _jumpTicksLeft - (int)MathF.Ceiling(delta * Ticks));
         }
 
-        if (!ChuteOpen && jumpHeld && VerticalSpeed < FallStartSpeed)
+        if (!ChuteOpen && jumpHeld && (VerticalSpeed < FallStartSpeed || _pastJumpTop))
         {
             ChuteOpen = true;
             mixer.Play("CHUTEOUT");
@@ -619,9 +627,17 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
         }
     }
 
+    /// <summary>A jump's frames that follow the speed reached its top (0x573a48): the chute may open,
+    /// without waiting to fall faster than <see cref="FallStartSpeed"/>.</summary>
+    private bool _pastJumpTop;
+
     private void UpdateState(float forward, float strafe, float delta)
     {
         StateTime += delta;
+        if (OnFloor || (VerticalSpeed > 0f && !ChuteOpen))
+        {
+            _pastJumpTop = false;
+        }
         if (UpdateCombatState(delta))
         {
             return;
@@ -645,7 +661,8 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
             {
                 SetState(MathF.Abs(ForwardSpeed) > MovingSpeed ? State.RunJump : State.Jump);
             }
-            else if (VerticalSpeed < FallStartSpeed && (Current is not (State.Jump or State.RunJump) || done))
+            // A jump falls when its frames run out (Animate), as the original's priorities have it.
+            else if (VerticalSpeed < FallStartSpeed && Current is not (State.Jump or State.RunJump))
             {
                 SetState(State.Fall);
             }
@@ -703,9 +720,38 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
             case State.Turn:
                 AnimationFrame = Yaw / TurnFrameDegrees * frameCount(State.Turn);
                 break;
+            case State.Jump or State.RunJump:
+                AnimateJump(delta);
+                break;
             default:
                 AnimationFrame += Ticks * delta;
                 break;
+        }
+    }
+
+    /// <summary>A jump's frames (0x4646a4): timed, then following the vertical speed down through its
+    /// top, then the fall. Played through by time, the jump ended while Kurt still rose, and he hung on
+    /// its last frame until falling fast enough.</summary>
+    private void AnimateJump(float delta)
+    {
+        var (timed, frames) = Current == State.Jump ? (JumpTimedFrames, JumpFrames) : (RunJumpTimedFrames, RunJumpFrames);
+        if (AnimationFrame < timed)
+        {
+            AnimationFrame = MathF.Min(AnimationFrame + Ticks * delta, timed);
+            return;
+        }
+
+        var frame = (int)AnimationFrame;
+        while (frame < frames && VerticalSpeed <= JumpSpeeds[frame])
+        {
+            frame++;
+        }
+
+        AnimationFrame = frame;
+        _pastJumpTop |= VerticalSpeed <= 0f;
+        if (frame >= frames)
+        {
+            SetState(State.Fall);
         }
     }
 
