@@ -39,9 +39,10 @@ public class FallTests
     }
 
     [Theory]
-    [InlineData(0, Difficulty.Normal, 117.65f, 2, 6.5f, 32, 63)]
-    [InlineData(4, Difficulty.Easy, 164.71f, 2, 3.5f, 28, 51)]
-    [InlineData(4, Difficulty.Hard, 274.51f, 4, 1.5f, 12, 27)]
+    // Personal tweak: spreads 2 tighter than the original's (FallSim.SpreadBase), not below 0.
+    [InlineData(0, Difficulty.Normal, 117.65f, 2, 4.5f, 32, 63)]
+    [InlineData(4, Difficulty.Easy, 164.71f, 2, 1.5f, 28, 51)]
+    [InlineData(4, Difficulty.Hard, 274.51f, 4, 0f, 12, 27)]
     public void DifficultyAsGodot(int index, Difficulty difficulty, float beam, int missiles, float spread, int missileGap, int radarGap)
     {
         var sim = NewFall(index, difficulty);

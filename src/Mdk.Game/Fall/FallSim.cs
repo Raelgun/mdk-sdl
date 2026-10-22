@@ -81,8 +81,11 @@ public sealed partial class FallSim
     /// <summary>Missiles per detection: 2 + i / divisor.</summary>
     private static readonly int[] MissileDivisor = [5, 3, 2];
     private const int MissilesBase = 2;
-    /// <summary>Missile aim spread: base − i.</summary>
-    private static readonly float[] SpreadBase = [7.5f, 6.5f, 5.5f];
+    /// <summary>Missile aim spread: base − i, not below 0. Personal tweak: 2 tighter than the original's
+    /// 7.5, 6.5, 5.5. The original reseeds rand() with 12345 each game, so a fall replays the same
+    /// offsets every time (Level 1 on Normal: only the 5th missile misses a still Kurt); fresh random
+    /// offsets missed about half the time, and the falls were far easier than remembered.</summary>
+    private static readonly float[] SpreadBase = [5.5f, 4.5f, 3.5f];
     /// <summary>Ticks between missiles: 32 − step × i (+ 0-31).</summary>
     private static readonly int[] MissileGapStep = [1, 3, 5];
     private const int MissileGapBase = 32;
@@ -120,7 +123,7 @@ public sealed partial class FallSim
         var d = (int)setup.Difficulty;
         BeamSpeed = SteerMax * (1f + BeamFactor[d] * i);
         MissilesPerDetection = MissilesBase + i / MissileDivisor[d];
-        Spread = SpreadBase[d] - i;
+        Spread = MathF.Max(SpreadBase[d] - i, 0f);
         MissileGap = MissileGapBase - MissileGapStep[d] * i;
         RadarGap = RadarGapBase - RadarGapStep[d] * i;
         _pickupNames = [.. setup.Pickups];
