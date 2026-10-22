@@ -78,6 +78,23 @@ public class CameraTests
     }
 
     [Theory]
+    [InlineData(-2f)]
+    [InlineData(3f)]
+    [InlineData(FullLook)]
+    [InlineData(-FullLook)]
+    public void TheScopeStartsWhereTheCameraLooked(float mouseDown)
+    {
+        // Personal tweak: entering the scope keeps the camera's pitch, not level; the scope reaches as
+        // far as the camera, so fully up or down too.
+        var (camera, kurt, pitch) = CameraAfter(0f, 0.5f, mouseDown);
+        camera.Blend(kurt, kurt.Feet, kurt.Yaw, 1f);
+        kurt.EnterSniper();
+        Assert.True(kurt.Sniping);
+        Assert.Equal(pitch, kurt.Scope.Pitch, 1);
+        Assert.NotEqual(0f, kurt.Scope.Pitch);
+    }
+
+    [Theory]
     [InlineData(FullLook)]
     [InlineData(-FullLook)]
     public void FramesBetweenStepsStayUprightLookingFullyUpOrDown(float mouseDown)

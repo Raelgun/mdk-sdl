@@ -40,6 +40,10 @@ public sealed partial class Kurt
 
     /// <summary>Enters sniper mode (damp_move 0x46883c): only standing on a floor, not knocked down,
     /// sliding or throwing. Kurt stops firing and shows SNIPERON (state 803).</summary>
+    /// <summary>Personal tweak: the follow camera's pitch as last drawn (degrees, positive looks down),
+    /// where the scope starts.</summary>
+    public float ViewPitch;
+
     public void EnterSniper()
     {
         if (!CanSnipe)
@@ -53,6 +57,9 @@ public sealed partial class Kurt
         StrafeSpeed = 0f;
         TurnRate = 0f;
         Scope.Reset();
+        // Personal tweak: the scope looks where the camera did, not level: looking up or down at a
+        // target and entering the scope lost it.
+        Scope.Pitch = Math.Clamp(ViewPitch, -Scope.PitchUp, Scope.PitchDown);
         SetState(State.Still);
         mixer.Play("SNIPERON");
         _breathVoice = mixer.PlayLooped("BREATH");

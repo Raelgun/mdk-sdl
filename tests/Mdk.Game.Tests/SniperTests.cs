@@ -143,8 +143,11 @@ public class SniperTests
         Assert.Equal(turnWide * Scope.ZoomMin, turnNarrow, 3);
         Assert.True(wide.Pitch > 0f);
 
+        // Personal tweak: as far as the follow camera, 89° down and 60° up.
         wide.Look(0f, 0f, new Vector2(0f, 1000f), Scope.Turbo.Off, Tick);
-        Assert.Equal(Scope.PitchLimit, wide.Pitch);
+        Assert.Equal(Scope.PitchDown, wide.Pitch);
+        wide.Look(0f, 0f, new Vector2(0f, -1000f), Scope.Turbo.Off, Tick);
+        Assert.Equal(-Scope.PitchUp, wide.Pitch);
     }
 
     [Fact]

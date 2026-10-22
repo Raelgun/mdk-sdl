@@ -130,6 +130,7 @@ public sealed class FollowCamera(ArenaSpace? space = null)
 
         _lookOffset = Math.Clamp(_lookOffset, MinPitch - _arenaPitch - _airPitch, MaxPitch - _arenaPitch - _airPitch);
         var pitch = ViewPitch(_arenaPitch + _lookOffset + _airPitch - ClimbPitch * _climb + kurt.CameraTilt);
+        kurt.ViewPitch = float.RadiansToDegrees(pitch);
         var facing = kurt.Facing;
         Position = Point(kurt.Feet, facing, pitch, kurt.CameraPivot);
         if (space != null && !kurt.Sniping && !kurt.Frozen && kurt.Current != Kurt.State.Dead)
@@ -193,6 +194,7 @@ public sealed class FollowCamera(ArenaSpace? space = null)
         }
 
         var pitch = ViewPitch(FrameBlend.Lerp(from.Pitch, _aim.Pitch, alpha) + _lookOffset);
+        kurt.ViewPitch = float.RadiansToDegrees(pitch);
         Position = Point(feet, facing, pitch, FrameBlend.Lerp(from.Pivot, _aim.Pivot, alpha));
         Orient(facing, pitch);
         Turn(ShakeOffset * float.DegreesToRadians(FieldOfView) / ViewHeight, float.DegreesToRadians(FrameBlend.Lerp(from.Roll, _aim.Roll, alpha)));

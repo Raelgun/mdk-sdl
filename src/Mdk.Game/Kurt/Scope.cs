@@ -25,7 +25,10 @@ public sealed class Scope
 
     /// <summary>Zoom (0x57391c, the inverse of the magnification): 1 on entering, down to 0.25 (4x).</summary>
     public const float ZoomMin = 0.25f;
-    public const float PitchLimit = 50f;
+    /// <summary>Personal tweak: the scope looks as far up and down as the follow camera (60° up, 89°
+    /// down), not the original's 50° either way: a target above or below stayed out of reach.</summary>
+    public const float PitchUp = 60f;
+    public const float PitchDown = 89f;
     public const int ClipSize = 3;
     /// <summary>Normal bullets: as many as wanted.</summary>
     public const int Bullets = 0;
@@ -107,7 +110,7 @@ public sealed class Scope
         _lookSpeed.X = Accelerate(_lookSpeed.X, turn, turbo, delta);
         _lookSpeed.Y = Accelerate(_lookSpeed.Y, tilt, turbo, delta);
         var scale = Zoom * LookScale * delta;
-        Pitch = Math.Clamp(Pitch + _lookSpeed.Y * scale + mouse.Y * Zoom, -PitchLimit, PitchLimit);
+        Pitch = Math.Clamp(Pitch + _lookSpeed.Y * scale + mouse.Y * Zoom, -PitchUp, PitchDown);
         return -(_lookSpeed.X * scale + mouse.X * Zoom);
     }
 
