@@ -383,8 +383,9 @@ None open. Answered (Ghidra): which objects Kurt walks into or stands on
    drawn between the last two steps, the objects and the cutscene camera between the last two
    ticks, by the time left over; Kurt is drawn with what carries him; teleports, arena changes
    and cuts snap. The mouse turns Kurt and the camera (and the scope) every frame. Animations
-   are drawn between their frames (a loop goes on to its first; restarts snap). Effects,
-   pieces and ropes stay at the tick rate; tests' frames are steps, unblended.
+   are drawn between their frames (a loop goes on to its first; restarts snap), the flying
+   pieces and sprite effects between ticks (their sprites' frames and the ropes stay at the
+   tick rate); tests' frames are steps, unblended.
 7. 🟡 Script VM and objects (`Scripts/`: ports of `script_vm.gd`, `script_runtime.gd`,
    `object_motion.gd`, `object_behaviors.gd`; 30 ticks per second, object moves are BSP box sweeps;
    the arenas' own scripts run after the objects, as in `game_frame`).

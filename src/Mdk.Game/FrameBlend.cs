@@ -37,6 +37,9 @@ public sealed class FrameBlend(Blending blending)
     /// <summary>Per model, the pose drawn and its blended parts.</summary>
     private readonly Dictionary<Model, (Vector3[][] Pose, Vector3[][] Parts)> _poses = [];
 
+    /// <summary>How far a frame is from the last tick to the next (0-1; tests: 1, the tick).</summary>
+    public float Tick => blending == Blending.Off ? 1f : _tick;
+
     /// <summary>Kurt's feet and yaw as drawn.</summary>
     public Vector3 Feet { get; private set; }
     public float Yaw { get; private set; }

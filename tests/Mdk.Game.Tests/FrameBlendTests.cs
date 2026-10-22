@@ -5,6 +5,7 @@ using Mdk.Game.Audio;
 using Mdk.Game.Collision;
 using Mdk.Game.Kurt;
 using Mdk.Game.Objects;
+using Mdk.Game.Scripts;
 
 namespace Mdk.Game.Tests;
 
@@ -212,5 +213,36 @@ public class FrameBlendTests
         // Kurt drawn 1 further: so is the camera.
         camera.Blend(kurt, kurt.Feet + Vector3.UnitX, kurt.Yaw, 1f);
         Assert.Equal(position.X + 1f, camera.Position.X, Precision);
+    }
+
+    [Fact]
+    public void PiecesAreDrawnBetweenTicks()
+    {
+        // Issue #16: sparks and pieces flew at 30 Hz. A new one is drawn where it is.
+        var debris = new Debris(new Random(1));
+        debris.Spark("A", Vector3.Zero, 1, 1f, 3, 3);
+        var piece = debris.Pieces[0];
+        Assert.Equal(piece.Center, piece.CenterAt(Half));
+        Assert.Equal(piece.Orientation, piece.OrientationAt(Half));
+
+        var (center, orientation) = (piece.Center, piece.Orientation);
+        debris.Update(1f);
+        Assert.Equal(Vector3.Lerp(center, piece.Center, Half), piece.CenterAt(Half));
+        Assert.Equal(Quaternion.Slerp(orientation, piece.Orientation, Half), piece.OrientationAt(Half));
+        Assert.Equal(piece.Center, piece.CenterAt(1f));
+    }
+
+    [Fact]
+    public void EffectsAreDrawnBetweenTicks()
+    {
+        // Issue #16: slime drops flew at 30 Hz. A new one is drawn where it is.
+        var effects = new Effects(new Random(1)) { FrameCount = (_, _) => 4 };
+        effects.SpawnDrop("A", Vector3.Zero, Vector3.UnitX, 1f);
+        var drop = effects.All[0];
+        Assert.Equal(drop.Position, drop.PositionAt(Half));
+
+        effects.Update(1f);
+        Assert.Equal(new Vector3(Half, 0f, 0f), drop.PositionAt(Half));
+        Assert.Equal(drop.Position, drop.PositionAt(1f));
     }
 }

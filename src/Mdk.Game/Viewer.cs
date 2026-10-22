@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Mdk.Engine.Audio;
 using Mdk.Engine.Diagnostics;
@@ -704,7 +705,7 @@ public sealed class Viewer : IScreen
         DrawObjects(_objects, _scripts, _level, _looks, _blend);
         _ropes.Draw(_scripts.Objects, _blend);
         _sniper.Draw(_kurt, _scripts, elapsed);
-        _effects.Draw(_scripts, camera);
+        _effects.Draw(_scripts, camera, _blend.Tick);
         _sprite.Draw(_kurt, _blend.Feet, camera.Position, eye.Forward, eye.Up, eye.FieldOfView, _space);
 
         _hud.Messages.Update(elapsed);
@@ -1037,6 +1038,26 @@ public sealed class Viewer : IScreen
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"trace {_time:0.000} kurt {f.X:0.00} {f.Y:0.00} {f.Z:0.00} camera {camera.X:0.00} {camera.Y:0.00} {camera.Z:0.00}{on}"));
         TracePoses();
+        TraceEffects();
+    }
+
+    /// <summary>For tests: each flying piece and sprite effect as drawn ("blend piece t id x y z",
+    /// "blend effect t id x y z").</summary>
+    private void TraceEffects()
+    {
+        foreach (var piece in _scripts.Debris.Pieces)
+        {
+            var c = piece.CenterAt(_blend.Tick);
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"blend piece {_time:0.000} {RuntimeHelpers.GetHashCode(piece)} {c.X:0.000} {c.Y:0.000} {c.Z:0.000}"));
+        }
+
+        foreach (var effect in _scripts.Effects.All)
+        {
+            var p = effect.PositionAt(_blend.Tick);
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"blend effect {_time:0.000} {RuntimeHelpers.GetHashCode(effect)} {p.X:0.000} {p.Y:0.000} {p.Z:0.000}"));
+        }
     }
 
     /// <summary>For tests: the middle of each animated object's pose in Kurt's arena as drawn
