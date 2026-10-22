@@ -1,5 +1,6 @@
 using System.Numerics;
 using Mdk.Formats;
+using Mdk.Game.Kurt;
 using Mdk.Game.Objects;
 
 namespace Mdk.Game;
@@ -26,8 +27,13 @@ public sealed class FrameBlend(Blending blending)
     private readonly record struct Pose(Vector3 Feet, float Yaw, int Teleports, MdkObject? Carrier, Vector3 CarrierAt, float CarrierYaw,
         Vector3 CarrierWas, float CarrierYawWas);
 
+    /// <summary>The scope after a step: on or not, its zoom, tilt and clip timer.</summary>
+    private readonly record struct Sight(bool Sniping, float Zoom, float Pitch, float Clip);
+
     private Pose? _previous;
     private Pose _current;
+    private Sight _sightWas;
+    private Sight _sight;
     private float _tick = 1f;
     /// <summary>The scripts' tick count at the last step.</summary>
     private int _ticks;
@@ -39,6 +45,11 @@ public sealed class FrameBlend(Blending blending)
 
     /// <summary>How far a frame is from the last tick to the next (0-1; tests: 1, the tick).</summary>
     public float Tick => blending == Blending.Off ? 1f : _tick;
+
+    /// <summary>The scope's zoom, tilt and clip timer as drawn.</summary>
+    public float Zoom { get; private set; } = 1f;
+    public float ScopePitch { get; private set; }
+    public float ClipTime { get; private set; }
 
     /// <summary>Kurt's feet and yaw as drawn.</summary>
     public Vector3 Feet { get; private set; }
@@ -56,6 +67,9 @@ public sealed class FrameBlend(Blending blending)
         _ticks = tick;
         var now = new Pose(kurt.Feet, kurt.Yaw, kurt.Teleports, carrier, carrier?.Position ?? Vector3.Zero, carrier?.Yaw ?? 0f,
             carrier?.PositionAt(was) ?? Vector3.Zero, carrier?.YawAt(was) ?? 0f);
+        var sight = new Sight(kurt.Sniping, kurt.Scope.Zoom, kurt.Scope.Pitch, kurt.Scope.ClipTime);
+        _sightWas = _previous == null ? sight : _sight;
+        _sight = sight;
         _previous = _previous == null || now.Teleports != _current.Teleports ? now : _current;
         _current = now;
         _driven = driven;
@@ -80,6 +94,24 @@ public sealed class FrameBlend(Blending blending)
         _tick = tick;
         (Feet, Yaw) = blending == Blending.Off || _previous is not { } from ? (kurt.Feet, kurt.Yaw) : KurtAt(from, _current, step, tick);
         _lag = Feet - kurt.Feet;
+        var scope = kurt.Scope;
+        (Zoom, ScopePitch, ClipTime) = blending == Blending.Off || _previous == null
+            ? (scope.Zoom, scope.Pitch, scope.ClipTime)
+            : ScopeAt(scope, _sightWas, _sight, step);
+    }
+
+    /// <summary>The scope between two steps: the zoom and the clip timer on the way, the tilt with
+    /// the mouse's since the step. Entering it, a shot or a reload (the timer up) are drawn at once.</summary>
+    private static (float Zoom, float Pitch, float Clip) ScopeAt(Scope scope, Sight from, Sight to, float step)
+    {
+        if (from.Sniping != to.Sniping)
+        {
+            return (scope.Zoom, scope.Pitch, scope.ClipTime);
+        }
+
+        var pitch = Math.Clamp(scope.Pitch + Lerp(from.Pitch, to.Pitch, step) - to.Pitch, -Scope.PitchLimit, Scope.PitchLimit);
+        var clip = to.Clip > from.Clip ? scope.ClipTime : Lerp(from.Clip, to.Clip, step);
+        return (Lerp(from.Zoom, to.Zoom, step), pitch, clip);
     }
 
     /// <summary>An object's transform as drawn.</summary>

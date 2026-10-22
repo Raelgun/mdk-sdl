@@ -9,6 +9,8 @@
 # - Issue #16: the objects' animations (LEVEL3's alien and grunt, the decoy) change every frame,
 #   not every 8th ("blend pose t TYPE_ID x y z": the middle of the pose as drawn); so do the
 #   pieces and the slime of a sniper grenade's kill, and the chain gun's sparks.
+# - Sniper mode, looking up: the zoom, the scope's tilt and the clip change every frame, not
+#   every 4th; the round cameras (the views at the top) every frame, not every 8th.
 # Run from the project folder after `dotnet build`: sh tests/interpolation_test.sh
 # No window: the game draws off screen and never takes the focus.
 export MDK_HIDDEN=1
@@ -158,6 +160,13 @@ OUT=$(details piece --level=3 --at=0,120,150,75.5 --fire --wait=4)
 set -- $(smooth "$OUT")
 echo "  sparks: $1 changes, $2 after a change"
 [ "$1" -gt 1000 ] && less 0.9 "$2"; check "the chain gun's sparks fly smoothly" $?
+
+OUT=$(run_all --level=3 --at=0,120,150,75.5 --sniper=1,-30 --zoom=1 --sniper-fire --wait=3)
+for WHAT in scope round; do
+	set -- $(smooth "$(echo "$OUT" | grep "^blend $WHAT " | cut -d' ' -f3-)")
+	echo "  sniper's ${WHAT}: $1 changes, $2 after a change"
+	[ "$1" -gt 30 ] && less 0.9 "$2"; check "the sniper's ${WHAT} moves smoothly" $?
+done
 
 [ $FAILED = 0 ] && echo PASSED && exit 0
 echo FAILED

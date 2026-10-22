@@ -401,8 +401,11 @@ public sealed class FollowCamera(ArenaSpace? space = null)
     public View View(float aspect) => CameraMath.View(Position, Forward, Up, FieldOfView, aspect, Near, Far);
 
     /// <summary>Sniper mode: the view from Kurt's eye through the scope.</summary>
-    public static View SniperView(Kurt kurt, float aspect) =>
-        CameraMath.ScopeView(kurt.SniperEye, kurt.SniperForward, kurt.Scope.Zoom, aspect, Near, Far);
+    public static View SniperView(Kurt kurt, float aspect) => SniperView(kurt.SniperEye, kurt.SniperForward, kurt.Scope.Zoom, aspect);
+
+    /// <summary>Sniper mode's view from <paramref name="eye"/> (a frame between steps).</summary>
+    public static View SniperView(Vector3 eye, Vector3 forward, float zoom, float aspect) =>
+        CameraMath.ScopeView(eye, forward, zoom, aspect, Near, Far);
 
     /// <summary>The camera's up for a line of sight (no roll).</summary>
     public static Vector3 UpOf(Vector3 forward) =>

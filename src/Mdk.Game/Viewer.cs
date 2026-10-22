@@ -704,7 +704,7 @@ public sealed class Viewer : IScreen
         _view.DrawEnd(_scripts.EndLevel);
         DrawObjects(_objects, _scripts, _level, _looks, _blend);
         _ropes.Draw(_scripts.Objects, _blend);
-        _sniper.Draw(_kurt, _scripts, elapsed);
+        _sniper.Draw(_kurt, _scripts, _blend, elapsed);
         _effects.Draw(_scripts, camera, _blend.Tick);
         _sprite.Draw(_kurt, _blend.Feet, camera.Position, eye.Forward, eye.Up, eye.FieldOfView, _space);
 
@@ -723,10 +723,18 @@ public sealed class Viewer : IScreen
 
         if (_kurt.Sniping)
         {
-            return FollowCamera.SniperView(_kurt, aspect);
+            return _blending == Blending.Off ? FollowCamera.SniperView(_kurt, aspect) : ScopeView(aspect);
         }
 
         return CutsceneCamera.Active(_scripts) ? _cutscene.View(aspect) : _follow.View(aspect);
+    }
+
+    /// <summary>Sniper mode's view as drawn: from Kurt between steps, the scope's tilt and zoom too.</summary>
+    private View ScopeView(float aspect)
+    {
+        var (yaw, pitch) = (_blend.Yaw, _blend.ScopePitch);
+        var eye = Scope.Eye(_blend.Feet, Scope.Direction(yaw, 0f), pitch);
+        return FollowCamera.SniperView(eye, Scope.Direction(yaw, pitch), _blend.Zoom, aspect);
     }
 
     /// <summary>The camera's axes and field of view outside sniper mode: flying, a cutscene's or Kurt's.</summary>
@@ -1039,6 +1047,31 @@ public sealed class Viewer : IScreen
             $"trace {_time:0.000} kurt {f.X:0.00} {f.Y:0.00} {f.Z:0.00} camera {camera.X:0.00} {camera.Y:0.00} {camera.Z:0.00}{on}"));
         TracePoses();
         TraceEffects();
+        TraceScope();
+    }
+
+    /// <summary>For tests: in sniper mode, the scope and the round cameras as drawn ("blend scope t
+    /// scope zoom pitch clip", "blend round t slot x y z").</summary>
+    private void TraceScope()
+    {
+        if (!_kurt.Sniping)
+        {
+            return;
+        }
+
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"blend scope {_time:0.000} scope {_blend.Zoom:0.0000} {_blend.ScopePitch:0.000} {_blend.ClipTime:0.0000}"));
+        for (var i = 0; i < SniperRounds.Slots; i++)
+        {
+            var camera = _scripts.SniperRounds.Camera(i, _blend.Tick);
+            if (camera.Shot != SniperRounds.Shot.Watching)
+            {
+                continue;
+            }
+
+            var p = camera.Position;
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"blend round {_time:0.000} {i} {p.X:0.00} {p.Y:0.00} {p.Z:0.00}"));
+        }
     }
 
     /// <summary>For tests: each flying piece and sprite effect as drawn ("blend piece t id x y z",

@@ -216,6 +216,47 @@ public class FrameBlendTests
     }
 
     [Fact]
+    public void TheScopeIsDrawnBetweenSteps()
+    {
+        // Issue #16: the zoom and the clip moved at 60 Hz. The mouse's tilt since the step shows.
+        var kurt = NewKurt();
+        kurt.EnterSniper();
+        var scope = kurt.Scope;
+        scope.ClipTime = 2f;
+        var blend = new FrameBlend(Blending.On);
+        blend.Record(kurt, null, null, 0);
+        (scope.Zoom, scope.Pitch, scope.ClipTime) = (Half, 10f, 1f);
+        blend.Record(kurt, null, null, 0);
+        scope.Pitch += 2f;
+
+        blend.Update(kurt, Half, 1f);
+        Assert.Equal(0.75f, blend.Zoom, Precision);
+        Assert.Equal(7f, blend.ScopePitch, Precision);
+        Assert.Equal(1.5f, blend.ClipTime, Precision);
+
+        // A shot or a reload refills the clip at once.
+        scope.ClipTime = 3f;
+        blend.Record(kurt, null, null, 0);
+        blend.Update(kurt, Half, 1f);
+        Assert.Equal(3f, blend.ClipTime);
+    }
+
+    [Fact]
+    public void TheScopeOpensAtOnce()
+    {
+        // The last time's zoom isn't drawn on the way to the new one.
+        var kurt = NewKurt();
+        kurt.Scope.Zoom = Scope.ZoomMin;
+        var blend = new FrameBlend(Blending.On);
+        blend.Record(kurt, null, null, 0);
+        kurt.EnterSniper();
+        blend.Record(kurt, null, null, 0);
+
+        blend.Update(kurt, Half, 1f);
+        Assert.Equal(1f, blend.Zoom);
+    }
+
+    [Fact]
     public void PiecesAreDrawnBetweenTicks()
     {
         // Issue #16: sparks and pieces flew at 30 Hz. A new one is drawn where it is.

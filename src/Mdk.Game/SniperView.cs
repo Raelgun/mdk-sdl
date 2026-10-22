@@ -46,12 +46,12 @@ public sealed class SniperView(Renderer renderer, ObjectView objects, LevelData 
     private readonly List<SniperRounds.RoundCamera> _cameras = [];
 
     /// <summary>Each frame: the rounds in flight, then (in sniper mode) the sniper screen's insets
-    /// and state.</summary>
-    public void Draw(Kurt.Kurt kurt, ScriptRuntime scripts, float delta)
+    /// and state, as <paramref name="blend"/> draws them between ticks and steps.</summary>
+    public void Draw(Kurt.Kurt kurt, ScriptRuntime scripts, FrameBlend blend, float delta)
     {
         foreach (var round in scripts.SniperRounds.Visuals)
         {
-            objects.Draw(round, LookOf(round.Arena));
+            objects.Draw(round, LookOf(round.Arena), scripts.SniperRounds.TransformOf(round, blend.Tick));
         }
 
         if (!kurt.Sniping)
@@ -64,17 +64,17 @@ public sealed class SniperView(Renderer renderer, ObjectView objects, LevelData 
         cameras.Clear();
         for (var i = 0; i < SniperRounds.Slots; i++)
         {
-            cameras.Add(scripts.SniperRounds.Camera(i));
+            cameras.Add(scripts.SniperRounds.Camera(i, blend.Tick));
         }
 
-        hud.Sniper.Update(delta, new SniperHud(kurt.Scope.Zoom, kurt.Inventory.Ammo, kurt.Inventory.SelectedAmmo, cameras, Aim(kurt, scripts)));
+        hud.Sniper.Update(delta, new SniperHud(blend.Zoom, kurt.Inventory.Ammo, kurt.Inventory.SelectedAmmo, cameras, Aim(kurt, scripts)));
         var (scale, left) = SniperOverlay.Placement(renderer.CanvasWidth);
         for (var i = 0; i < cameras.Count; i++)
         {
             DrawRoundCamera(cameras[i], OnCanvas(SniperOverlay.RoundViews[i], scale, left));
         }
 
-        DrawClip(kurt, scripts, OnCanvas(new RectangleF(0f, 0f, SniperScreen.ViewWidth, SniperScreen.ViewHeight), scale, left));
+        DrawClip(kurt, scripts, blend.ClipTime, OnCanvas(new RectangleF(0f, 0f, SniperScreen.ViewWidth, SniperScreen.ViewHeight), scale, left));
     }
 
     /// <summary>The air strike's target test, only with the strike selected and the clip ready.</summary>
@@ -108,8 +108,8 @@ public sealed class SniperView(Renderer renderer, ObjectView objects, LevelData 
     }
 
     /// <summary>The loaded rounds of the selected type between the clip's keys; they slide into the
-    /// chamber (key 0) after a shot.</summary>
-    private void DrawClip(Kurt.Kurt kurt, ScriptRuntime scripts, RectangleF area)
+    /// chamber (key 0) after a shot (the clip timer at <paramref name="clip"/>).</summary>
+    private void DrawClip(Kurt.Kurt kurt, ScriptRuntime scripts, float clip, RectangleF area)
     {
         var model = scripts.FindModel(scripts.CurrentArena, RoundModels[kurt.Inventory.SelectedAmmo]);
         if (model == null)
@@ -123,7 +123,7 @@ public sealed class SniperView(Renderer renderer, ObjectView objects, LevelData 
         var open = false;
         for (var i = 0; i < Scope.ClipSize; i++)
         {
-            var t = kurt.Scope.ClipTime + i;
+            var t = clip + i;
             if (i >= kurt.Scope.ClipRounds || t == 0f || t >= ClipKeys.Length - 1)
             {
                 continue;
