@@ -83,6 +83,15 @@ const int DefaultLevel = 7;
 // --perf's game seconds before frames are measured.
 const float DefaultWarmup = 2f;
 
+// Personal tweak: with no console window, a crash says what happened in a box (its start: the type,
+// the message and the first frames), instead of the game just vanishing.
+const int CrashTextLength = 1500;
+AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+{
+    var text = e.ExceptionObject.ToString() ?? "unknown error";
+    ErrorBox.Show($"MDK crashed:\n\n{(text.Length > CrashTextLength ? text[..CrashTextLength] + "..." : text)}");
+};
+
 var options = args.Where(a => a.StartsWith("--"))
     .Select(a => a[2..].Split('=', 2))
     .ToDictionary(p => p[0], p => p.Length > 1 ? p[1] : "");
@@ -124,7 +133,7 @@ if (options.TryGetValue("download-test", out var downloadUrl))
 var data = MdkData.Find();
 if (data == null)
 {
-    Console.Error.WriteLine("MDK data not found: install MDK (GOG/Steam), put this folder in it, set MDK_DATA_DIR, or name it as mdk in mdk_paths.cfg next to the program.");
+    ErrorBox.Show("MDK data not found: install MDK (GOG/Steam), put this folder in it, set MDK_DATA_DIR, or name it as mdk in mdk_paths.cfg next to the program.");
     return 1;
 }
 
@@ -136,7 +145,7 @@ if (options.TryGetValue("upscale-textures", out var upscale))
     var scale = options.TryGetValue("hd-scale", out var factor) ? int.Parse(factor, CultureInfo.InvariantCulture) : defaults.Scale;
     if (!HdOptions.Scales.Contains(scale))
     {
-        Console.Error.WriteLine($"--hd-scale: {string.Join(" or ", HdOptions.Scales)}");
+        ErrorBox.Show($"--hd-scale: {string.Join(" or ", HdOptions.Scales)}");
         return 1;
     }
 
@@ -161,7 +170,7 @@ int? Number(string name) => options.TryGetValue(name, out var text) ? int.Parse(
 var level = Number("level") ?? Number("stats") ?? Number("briefing") ?? Number("stream") ?? Number("fall") ?? DefaultLevel;
 if (BetaDemo.IsBeta(level) && BetaDemo.Find(data) == null)
 {
-    Console.Error.WriteLine("The 1996 beta demo not found: set MDK_BETA_DIR, or name it as beta in mdk_paths.cfg next to the program.");
+    ErrorBox.Show("The 1996 beta demo not found: set MDK_BETA_DIR, or name it as beta in mdk_paths.cfg next to the program.");
     return 1;
 }
 
@@ -171,7 +180,7 @@ if (options.TryGetValue("stereo", out var stereoText))
 {
     if (!StereoModes.TryParse(stereoText, out var parsedStereo))
     {
-        Console.Error.WriteLine("--stereo: off, sbs, sbsfull, crossview, int, intr, tab, tabr or vr");
+        ErrorBox.Show("--stereo: off, sbs, sbsfull, crossview, int, intr, tab, tabr or vr");
         return 1;
     }
 

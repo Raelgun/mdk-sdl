@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <!-- Personal tweak: a windowed app, so Windows opens no console window with the game (its log
+         still reaches redirected output; startup errors show in a box, ErrorBox). -->
+    <OutputType>WinExe</OutputType>
     <RootNamespace>Mdk.App</RootNamespace>
     <AssemblyName>mdk_sdl</AssemblyName>
     <!-- dotnet publish -c Release -r win-x64: one native exe (shaders embedded) and SDL3.dll. -->
