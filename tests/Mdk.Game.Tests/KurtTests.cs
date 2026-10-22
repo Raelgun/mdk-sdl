@@ -166,6 +166,61 @@ public class KurtTests
         Assert.True(kurt.VerticalSpeed <= Kurt.Kurt.UpdraftExitSpeed);
     }
 
+    /// <summary>Kurt on the pad, a tap of jump: up in the air.</summary>
+    private static Kurt.Kurt Jumped()
+    {
+        var kurt = Standing();
+        var jump = new Input();
+        jump.Hold(Key.Jump, Input.State.Down);
+        Run(kurt, jump, 2 * Step);
+        Assert.Equal(State.Jump, kurt.Current);
+        return kurt;
+    }
+
+    [DataFact]
+    public void TheChuteOpensFromAJumpsTop()
+    {
+        // Jump pressed again at the top of a jump opens the chute there (0x4646a4), not only once Kurt
+        // falls faster than 16 u/s, which left him hanging in the jump's last frame about 0.4 s.
+        var kurt = Jumped();
+        var idle = new Input();
+        while (kurt.VerticalSpeed > 0f)
+        {
+            kurt.Update(idle, Step);
+        }
+
+        var jump = new Input();
+        jump.Hold(Key.Jump, Input.State.Down);
+        Run(kurt, jump, 3 * Step);
+        Assert.True(kurt.ChuteOpen);
+        Assert.Equal(State.Chute, kurt.Current);
+    }
+
+    [DataFact]
+    public void AJumpsFramesFollowItsArcThenItFalls()
+    {
+        // After 10 timed frames, each frame waits for the vertical speed (0x492030): the last at -20 u/s,
+        // then the fall. Played by time, the jump ran out while Kurt still rose.
+        var kurt = Jumped();
+        var idle = new Input();
+        var frame = 0f;
+        while (kurt.Current == State.Jump)
+        {
+            Assert.True(kurt.AnimationFrame >= frame);
+            frame = kurt.AnimationFrame;
+            if (frame > 10f)
+            {
+                Assert.True(kurt.VerticalSpeed <= -3f, $"frame {frame} at {kurt.VerticalSpeed} u/s");
+            }
+
+            kurt.Update(idle, Step);
+        }
+
+        Assert.Equal(State.Fall, kurt.Current);
+        Assert.True(kurt.VerticalSpeed <= -20f);
+        Assert.Equal(15f, frame);
+    }
+
     [DataFact]
     public void ChuteFlapsWhileOpenAndClosesWithItsSound()
     {
