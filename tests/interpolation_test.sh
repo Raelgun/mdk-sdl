@@ -31,6 +31,20 @@ less() {
 	awk "BEGIN { exit !($1 < $2) }"
 }
 
+# What --trace prints besides Kurt: "blend WHAT t ..." lines.
+details() {
+	timeout 180 "$MDK" --mute --trace --fps=240 --screenshot="$SHOT" "$@" 2>&1 | grep "^blend $1 " | cut -d' ' -f3-
+}
+
+# How many changes a series makes, frame to frame ("t id x y z"), and the share of them that
+# follow a change: drawn every frame 1, every 4th (60 Hz) or 8th (30 Hz) 0.
+smooth() {
+	echo "$1" | awk '{ v = $3 " " $4 " " $5; c = ($2 in last) && last[$2] != v
+		if (c) { n++; if (moved[$2]) s++ }
+		moved[$2] = c; last[$2] = v }
+		END { printf "%d %.2f", n, n ? s / n : 0 }'
+}
+
 # Frames on a carrier of that type.
 on() {
 	echo "$1" | grep " on $2 "
@@ -115,6 +129,16 @@ OUT=$(run --level=5 --at=440,84,-2250,163 --event=52 --wait=2 | awk '$2 > 0.1')
 echo "  cutscene: the camera's jumps and moves on the way $(jumps "$OUT" 8), stutter $(stutter "$OUT" 8)"
 [ "$(jumps "$OUT" 8)" = "1 0" ]; check "a cut is drawn at once" $?
 less "$(stutter "$OUT" 8)" 2; check "the cutscene camera moves smoothly" $?
+
+OUT=$(details pose --level=3 --at=0,120,150,75.5 --wait=2)
+set -- $(smooth "$OUT")
+echo "  animations: $1 changes, $2 after a change"
+[ "$1" -gt 300 ] && less 0.9 "$2"; check "animations are drawn between their frames" $?
+
+OUT=$(details pose --level=3 --at=0,120,150,75.5 --give=SW_DUMMY --use --wait=4 | grep SW_DUMMY)
+set -- $(smooth "$OUT")
+echo "  decoy: $1 changes, $2 after a change"
+[ "$1" -gt 30 ] && less 0.9 "$2"; check "the decoy walks smoothly" $?
 
 [ $FAILED = 0 ] && echo PASSED && exit 0
 echo FAILED

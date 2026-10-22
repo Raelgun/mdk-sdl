@@ -956,7 +956,7 @@ public sealed class Viewer : IScreen
                 continue;
             }
 
-            view.Draw(obj, ObjectLook(level, looks, obj.Arena), blend.TransformOf(obj));
+            view.Draw(obj, ObjectLook(level, looks, obj.Arena), blend.TransformOf(obj), blend.PoseOf(obj));
         }
     }
 
@@ -1036,6 +1036,35 @@ public sealed class Viewer : IScreen
         var f = _blend.Feet;
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"trace {_time:0.000} kurt {f.X:0.00} {f.Y:0.00} {f.Z:0.00} camera {camera.X:0.00} {camera.Y:0.00} {camera.Z:0.00}{on}"));
+        TracePoses();
+    }
+
+    /// <summary>For tests: the middle of each animated object's pose in Kurt's arena as drawn
+    /// ("blend pose t TYPE_ID x y z", model space).</summary>
+    private void TracePoses()
+    {
+        foreach (var obj in _scripts.Objects)
+        {
+            if (obj.Animation == null || obj.Dead || !obj.Visible || obj.Arena != _scripts.CurrentArena)
+            {
+                continue;
+            }
+
+            var sum = Vector3.Zero;
+            var count = 0;
+            foreach (var part in _blend.PoseOf(obj))
+            {
+                foreach (var vertex in part)
+                {
+                    sum += vertex;
+                    count++;
+                }
+            }
+
+            var m = count == 0 ? Vector3.Zero : sum / count;
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"blend pose {_time:0.000} {obj.TypeName}_{obj.InstanceId} {m.X:0.000} {m.Y:0.000} {m.Z:0.000}"));
+        }
     }
 
     /// <summary>A music volume (0-0x7FFF) in whole decibels, as the Godot port's profile prints it.</summary>

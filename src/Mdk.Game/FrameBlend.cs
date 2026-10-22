@@ -1,4 +1,5 @@
 using System.Numerics;
+using Mdk.Formats;
 using Mdk.Game.Objects;
 
 namespace Mdk.Game;
@@ -33,6 +34,8 @@ public sealed class FrameBlend(Blending blending)
     /// <summary>What Kurt rides that follows him (drawn moved with him).</summary>
     private MdkObject? _driven;
     private Vector3 _lag;
+    /// <summary>Per model, the pose drawn and its blended parts.</summary>
+    private readonly Dictionary<Model, (Vector3[][] Pose, Vector3[][] Parts)> _poses = [];
 
     /// <summary>Kurt's feet and yaw as drawn.</summary>
     public Vector3 Feet { get; private set; }
@@ -96,6 +99,47 @@ public sealed class FrameBlend(Blending blending)
         }
 
         return obj == _driven ? obj.Position + _lag : obj.PositionAt(_tick);
+    }
+
+    /// <summary>An object's pose as drawn: between its animation's frames (a scratch pose per
+    /// model, kept: no allocation per frame).</summary>
+    public Vector3[][] PoseOf(MdkObject obj)
+    {
+        if (blending == Blending.Off || obj.FramesAt(_tick) is not { } frames)
+        {
+            return obj.PoseParts();
+        }
+
+        var (from, to, share) = frames;
+        if (!_poses.TryGetValue(obj.Model!, out var scratch))
+        {
+            scratch = _poses[obj.Model!] = (new Vector3[to.Length][], new Vector3[to.Length][]);
+        }
+
+        var (pose, parts) = scratch;
+        for (var p = 0; p < to.Length; p++)
+        {
+            // A part the animation leaves still is the model's own.
+            if (from[p] == to[p])
+            {
+                pose[p] = to[p];
+                continue;
+            }
+
+            if (parts[p]?.Length != to[p].Length)
+            {
+                parts[p] = new Vector3[to[p].Length];
+            }
+
+            for (var v = 0; v < to[p].Length; v++)
+            {
+                parts[p][v] = Vector3.Lerp(from[p][v], to[p][v], share);
+            }
+
+            pose[p] = parts[p];
+        }
+
+        return pose;
     }
 
     /// <summary>Where a frame draws a point moving with an object (a rope's end on it).</summary>
