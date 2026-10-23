@@ -40,14 +40,15 @@ header() {
 	echo "$OUT" | grep -qx "$2"; check "LEVEL$1 fall, $3" $?
 }
 
+# Personal tweak: spreads 2 tighter than the original's (FallSim.SpreadBase), not below 0.
 difficulty Normal
-header 7 "Fall: index 0 difficulty 1 beam 117.65 missiles 2 spread 6.50 missile gap 32 radar gap 63 pickups SW_HOME,SW_GATT,SW_HOME" normal
-header 6 "Fall: index 1 difficulty 1 beam 141.18 missiles 2 spread 5.50 missile gap 29 radar gap 56 pickups SW_GATT,SW_HBOMB,SW_SGREN,SW_HOME" normal
-header 8 "Fall: index 4 difficulty 1 beam 211.76 missiles 3 spread 2.50 missile gap 20 radar gap 35 pickups SW_GATT,SW_HBOMB,SW_SGREN,SW_HOME" normal
+header 7 "Fall: index 0 difficulty 1 beam 117.65 missiles 2 spread 4.50 missile gap 32 radar gap 63 pickups SW_HOME,SW_GATT,SW_HOME" normal
+header 6 "Fall: index 1 difficulty 1 beam 141.18 missiles 2 spread 3.50 missile gap 29 radar gap 56 pickups SW_GATT,SW_HBOMB,SW_SGREN,SW_HOME" normal
+header 8 "Fall: index 4 difficulty 1 beam 211.76 missiles 3 spread 0.50 missile gap 20 radar gap 35 pickups SW_GATT,SW_HBOMB,SW_SGREN,SW_HOME" normal
 difficulty Easy
-header 8 "Fall: index 4 difficulty 0 beam 164.71 missiles 2 spread 3.50 missile gap 28 radar gap 51 pickups SW_GATT,SW_HBOMB,SW_SGREN,SW_HOME" easy
+header 8 "Fall: index 4 difficulty 0 beam 164.71 missiles 2 spread 1.50 missile gap 28 radar gap 51 pickups SW_GATT,SW_HBOMB,SW_SGREN,SW_HOME" easy
 difficulty Hard
-header 8 "Fall: index 4 difficulty 2 beam 274.51 missiles 4 spread 1.50 missile gap 12 radar gap 27 pickups SW_GATT,SW_HBOMB,SW_SGREN,SW_HOME" hard
+header 8 "Fall: index 4 difficulty 2 beam 274.51 missiles 4 spread 0.00 missile gap 12 radar gap 27 pickups SW_GATT,SW_HBOMB,SW_SGREN,SW_HOME" hard
 
 # The whole fall (5 s of intro, 33 s of fall), then the level.
 difficulty Normal
