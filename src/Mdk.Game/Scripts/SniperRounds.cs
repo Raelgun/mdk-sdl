@@ -117,6 +117,8 @@ public sealed class SniperRounds(ScriptRuntime runtime)
         public float CameraDistance;
         public Vector3 CameraPosition;
         public float Watch;
+        /// <summary>The flight at the start of the last tick; null: fired since.</summary>
+        public (Vector3 Position, Vector3 Camera, float Yaw, float Pitch, float Roll)? Ticked;
     }
 
     private readonly Round[] _rounds = [new(), new(), new()];
@@ -180,11 +182,13 @@ public sealed class SniperRounds(ScriptRuntime runtime)
         }
 
         round.Visual = MakeVisual(kind);
+        round.Ticked = null;
         return true;
     }
 
-    /// <summary>What the camera of slot <paramref name="index"/> shows.</summary>
-    public RoundCamera Camera(int index)
+    /// <summary>What the camera of slot <paramref name="index"/> shows, <paramref name="alpha"/> of
+    /// the way from the last tick's start to now (a frame between ticks; a new round: where it is).</summary>
+    public RoundCamera Camera(int index, float alpha)
     {
         var round = _rounds[index];
         if (round.State == State.Free)
@@ -194,7 +198,13 @@ public sealed class SniperRounds(ScriptRuntime runtime)
 
         if (round.State == State.Flying || round.Watch > 0f)
         {
-            return new RoundCamera(Shot.Watching, round.CameraPosition, Direction(round), 0f);
+            if (round.Ticked is not { } from || alpha >= 1f)
+            {
+                return new RoundCamera(Shot.Watching, round.CameraPosition, Direction(round), 0f);
+            }
+
+            var forward = Kurt.Scope.Direction(FrameBlend.LerpAngle(from.Yaw, round.Yaw, alpha), FrameBlend.LerpAngle(from.Pitch, round.Pitch, alpha));
+            return new RoundCamera(Shot.Watching, Vector3.Lerp(from.Camera, round.CameraPosition, alpha), forward, 0f);
         }
 
         var shot = round.State switch
@@ -216,6 +226,26 @@ public sealed class SniperRounds(ScriptRuntime runtime)
 
         round.Path = path;
         round.PathTime = 0f;
+    }
+
+    /// <summary>A flying round's model as drawn <paramref name="alpha"/> of the way from the last
+    /// tick's start to now (a new round: where it is).</summary>
+    public Matrix4x4 TransformOf(MdkObject visual, float alpha)
+    {
+        foreach (var round in _rounds)
+        {
+            if (round.Visual != visual || round.Ticked is not { } from || alpha >= 1f)
+            {
+                continue;
+            }
+
+            var basis = VisualBasis(FrameBlend.LerpAngle(from.Roll, round.Roll, alpha), FrameBlend.LerpAngle(from.Pitch, round.Pitch, alpha),
+                FrameBlend.LerpAngle(from.Yaw, round.Yaw, alpha));
+            var at = Vector3.Lerp(from.Position, round.Position, alpha) + Vector3.UnitZ * visual.Lift;
+            return Matrix4x4.CreateScale(visual.Scale) * basis * Matrix4x4.CreateTranslation(at);
+        }
+
+        return visual.Transform;
     }
 
     /// <summary>A part named HEAD is aimed at, else the whole object.</summary>
@@ -246,6 +276,7 @@ public sealed class SniperRounds(ScriptRuntime runtime)
                 continue;
             }
 
+            round.Ticked = (round.Position, round.CameraPosition, round.Yaw, round.Pitch, round.Roll);
             if (round.State != State.Flying)
             {
                 round.Linger -= ticks;
@@ -310,16 +341,16 @@ public sealed class SniperRounds(ScriptRuntime runtime)
         if (round.Visual != null)
         {
             round.Visual.Position = round.Position;
-            round.Visual.RollingBasis = VisualBasis(round);
+            round.Visual.RollingBasis = VisualBasis(round.Roll, round.Pitch, round.Yaw);
         }
     }
 
     /// <summary>The round models stand upright (their length along +Z): the nose is turned from +Z
     /// to the flight direction, and the spin is around the length.</summary>
-    private static Matrix4x4 VisualBasis(Round round) =>
-        Matrix4x4.CreateRotationZ(float.DegreesToRadians(round.Roll))
-        * Matrix4x4.CreateRotationY(MathF.PI / 2f + float.DegreesToRadians(round.Pitch))
-        * Matrix4x4.CreateRotationZ(float.DegreesToRadians(round.Yaw));
+    private static Matrix4x4 VisualBasis(float roll, float pitch, float yaw) =>
+        Matrix4x4.CreateRotationZ(float.DegreesToRadians(roll))
+        * Matrix4x4.CreateRotationY(MathF.PI / 2f + float.DegreesToRadians(pitch))
+        * Matrix4x4.CreateRotationZ(float.DegreesToRadians(yaw));
 
     private static Vector3 Direction(Round round) => Kurt.Scope.Direction(round.Yaw, round.Pitch);
 

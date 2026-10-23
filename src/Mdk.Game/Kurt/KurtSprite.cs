@@ -186,10 +186,8 @@ public sealed class KurtSprite
 
         var pixel = 2f * depth * MathF.Tan(float.DegreesToRadians(fieldOfView) / 2f) / ViewHeight;
         var right = Vector3.Normalize(Vector3.Cross(forward, up));
-        // K_ROLLL and K_ROLLR are the same file, a roll to the right: mirrored for the left.
-        var flip = (kurt.Current == Kurt.State.Side && kurt.StrafeSpeed < 0f) || kurt.Current == Kurt.State.RollLeft ? -1f : 1f;
         var (name, frame) = Pick(kurt);
-        var quad = new Quad(feet, right * (pixel * flip), up * pixel);
+        var quad = new Quad(feet, right * (pixel * Mirror(kurt)), up * pixel);
         var rise = FeetRise / pixel;
         var floor = FloorDepth(space, eye, forward, quad, name, frame, rise);
         var body = InFront(depth, floor);
@@ -292,6 +290,11 @@ public sealed class KurtSprite
     /// a floor at <paramref name="floorDepth"/>.</summary>
     public static float Nearer(float depth, float? floorDepth) =>
         MathF.Min(MathF.Max(MinDepthShare, (depth - ShadowPull) / depth), InFront(depth, floorDepth));
+
+    /// <summary>The frame's horizontal scale: -1 mirrors it. K_ROLLL and K_ROLLR are the same file,
+    /// a roll to the right: mirrored for the left.</summary>
+    public static float Mirror(Kurt kurt) =>
+        kurt.Current == Kurt.State.RollLeft ? -1f : 1f;
 
     /// <summary>The animation and frame of Kurt's state; the chute opens, then sways.</summary>
     private (string Name, int Frame) Pick(Kurt kurt)

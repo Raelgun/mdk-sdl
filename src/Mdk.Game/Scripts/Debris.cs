@@ -82,8 +82,20 @@ public sealed class Debris
         /// <summary>Turn per tick.</summary>
         public Quaternion Spin = Quaternion.Identity;
         public int Ticks;
+        /// <summary>The place and turn at the start of the last tick; null: new since.</summary>
+        private (Vector3 Center, Quaternion Orientation)? _ticked;
 
         public bool IsSpark => Names == null;
+
+        /// <summary>A tick starts: frames until the next are drawn from here to the tick's.</summary>
+        public void Remember() => _ticked = (Center, Orientation);
+
+        /// <summary>The place and turn <paramref name="alpha"/> of the way from the last tick's
+        /// start to now (a frame between ticks).</summary>
+        public Vector3 CenterAt(float alpha) => _ticked is { } from ? FrameBlend.Lerp(from.Center, Center, alpha) : Center;
+
+        public Quaternion OrientationAt(float alpha) =>
+            _ticked is { } from && alpha < 1f ? Quaternion.Slerp(from.Orientation, Orientation, alpha) : Orientation;
 
         /// <summary>Back to a new piece's state (taken again from the pool).</summary>
         public void Reset()
@@ -96,6 +108,7 @@ public sealed class Debris
             (ColourBase, ColourRange, TrailEvery, TrailTicks, Ticks) = (0, 0, 0, 0, 0);
             (Center, Velocity) = (Vector3.Zero, Vector3.Zero);
             (Orientation, Spin) = (Quaternion.Identity, Quaternion.Identity);
+            _ticked = null;
         }
     }
 
@@ -362,6 +375,7 @@ public sealed class Debris
         for (var i = _pieces.Count - 1; i >= 0; i--)
         {
             var piece = _pieces[i];
+            piece.Remember();
             piece.Orientation = Quaternion.Normalize(piece.Orientation * piece.Spin);
             Move(piece, ticks);
             piece.Ticks -= (int)MathF.Round(ticks);

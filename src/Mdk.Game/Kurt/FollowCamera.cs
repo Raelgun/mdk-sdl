@@ -54,9 +54,9 @@ public sealed class FollowCamera(ArenaSpace? space = null)
     private static readonly Vector3 SightBox = new(0.1f);
     private const float PushFloorRange = 4f;
     private const float PushSide = 0.5f;
-    /// <summary>Personal tweak: the wall push moves Kurt at most this fast (u/s) instead of all at
-    /// once, so running through a door doesn't "fast-forward" him. Set to float.MaxValue for the
-    /// original behaviour.</summary>
+    /// <summary>The camera's push on Kurt, and a solid object's shove, move him at most this fast
+    /// (u/s), eased in over the next steps: all at once, a door behind him "fast-forwarded" him through
+    /// it, far more visibly than in the original. float.MaxValue pushes all at once.</summary>
     private const float MaxPushSpeed = 40f;
     /// <summary>Screen shake: each tick above 1 the view turns by up to ±1.64 × the shake in pixels of
     /// the 360-high view (at most ±19 across, ±59 up and down); it drains by 0.25 per tick.</summary>
@@ -270,7 +270,7 @@ public sealed class FollowCamera(ArenaSpace? space = null)
             var d = Vector2.Distance(new Vector2(camera.X, camera.Y), new Vector2(point.X, point.Y));
             if (Push(kurt, arenas, normal * d, new Vector2(normal.Y, -normal.X) * (d * PushSide)) is { } push)
             {
-                // Personal tweak: ease the push in; what's left is pushed on the next steps.
+                // Eased in (MaxPushSpeed): what's left is pushed on the next steps.
                 var limit = MaxPushSpeed * delta;
                 if (push.Length() > limit)
                 {
@@ -287,9 +287,8 @@ public sealed class FollowCamera(ArenaSpace? space = null)
         }
 
         var end = ClipView(kurt.Feet + Vector3.UnitZ * HeadHeight, camera);
+        // A solid object (a door) behind Kurt shoves him on by up to ~8 units in one step: eased in too.
         var offset = end - camera;
-        // Personal tweak: a solid object (a door) behind Kurt shoves him on by up to ~8 units in one
-        // step; ease that in as well.
         var clipLimit = MaxPushSpeed * delta;
         if (offset.Length() > clipLimit)
         {
@@ -404,8 +403,11 @@ public sealed class FollowCamera(ArenaSpace? space = null)
     public View View(float aspect) => CameraMath.View(Position, Forward, Up, FieldOfView, aspect, Near, Far);
 
     /// <summary>Sniper mode: the view from Kurt's eye through the scope.</summary>
-    public static View SniperView(Kurt kurt, float aspect) =>
-        CameraMath.ScopeView(kurt.SniperEye, kurt.SniperForward, kurt.Scope.Zoom, aspect, Near, Far);
+    public static View SniperView(Kurt kurt, float aspect) => SniperView(kurt.SniperEye, kurt.SniperForward, kurt.Scope.Zoom, aspect);
+
+    /// <summary>Sniper mode's view from <paramref name="eye"/> (a frame between steps).</summary>
+    public static View SniperView(Vector3 eye, Vector3 forward, float zoom, float aspect) =>
+        CameraMath.ScopeView(eye, forward, zoom, aspect, Near, Far);
 
     /// <summary>The camera's up for a line of sight (no roll).</summary>
     public static Vector3 UpOf(Vector3 forward) =>

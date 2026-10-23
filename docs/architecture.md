@@ -382,8 +382,11 @@ None open. Answered (Ghidra): which objects Kurt walks into or stands on
    Frames between steps (screens above 60 Hz, `FrameBlend.cs`): Kurt and the follow camera are
    drawn between the last two steps, the objects and the cutscene camera between the last two
    ticks, by the time left over; Kurt is drawn with what carries him; teleports, arena changes
-   and cuts snap. The mouse turns Kurt and the camera (and the scope) every frame. Effects,
-   pieces, ropes and animation frames stay at the tick rate; tests' frames are steps, unblended.
+   and cuts snap. The mouse turns Kurt and the camera (and the scope) every frame. Animations
+   are drawn between their frames (a loop goes on to its first; restarts snap), the flying
+   pieces and sprite effects between ticks (their sprites' frames and the ropes stay at the
+   tick rate). In sniper mode the zoom, the tilt and the clip are drawn between steps, the
+   rounds and their cameras between ticks; tests' frames are steps, unblended.
 7. 🟡 Script VM and objects (`Scripts/`: ports of `script_vm.gd`, `script_runtime.gd`,
    `object_motion.gd`, `object_behaviors.gd`; 30 ticks per second, object moves are BSP box sweeps;
    the arenas' own scripts run after the objects, as in `game_frame`).

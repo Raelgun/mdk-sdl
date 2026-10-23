@@ -5,6 +5,7 @@ using Mdk.Game.Audio;
 using Mdk.Game.Collision;
 using Mdk.Game.Kurt;
 using Mdk.Game.Objects;
+using Mdk.Game.Scripts;
 
 namespace Mdk.Game.Tests;
 
@@ -212,5 +213,77 @@ public class FrameBlendTests
         // Kurt drawn 1 further: so is the camera.
         camera.Blend(kurt, kurt.Feet + Vector3.UnitX, kurt.Yaw, 1f);
         Assert.Equal(position.X + 1f, camera.Position.X, Precision);
+    }
+
+    [Fact]
+    public void TheScopeIsDrawnBetweenSteps()
+    {
+        // Issue #16: the zoom and the clip moved at 60 Hz. The mouse's tilt since the step shows.
+        var kurt = NewKurt();
+        kurt.EnterSniper();
+        var scope = kurt.Scope;
+        scope.ClipTime = 2f;
+        var blend = new FrameBlend(Blending.On);
+        blend.Record(kurt, null, null, 0);
+        (scope.Zoom, scope.Pitch, scope.ClipTime) = (Half, 10f, 1f);
+        blend.Record(kurt, null, null, 0);
+        scope.Pitch += 2f;
+
+        blend.Update(kurt, Half, 1f);
+        Assert.Equal(0.75f, blend.Zoom, Precision);
+        Assert.Equal(7f, blend.ScopePitch, Precision);
+        Assert.Equal(1.5f, blend.ClipTime, Precision);
+
+        // A shot or a reload refills the clip at once.
+        scope.ClipTime = 3f;
+        blend.Record(kurt, null, null, 0);
+        blend.Update(kurt, Half, 1f);
+        Assert.Equal(3f, blend.ClipTime);
+    }
+
+    [Fact]
+    public void TheScopeOpensAtOnce()
+    {
+        // The last time's zoom isn't drawn on the way to the new one.
+        var kurt = NewKurt();
+        kurt.Scope.Zoom = Scope.ZoomMin;
+        var blend = new FrameBlend(Blending.On);
+        blend.Record(kurt, null, null, 0);
+        kurt.EnterSniper();
+        blend.Record(kurt, null, null, 0);
+
+        blend.Update(kurt, Half, 1f);
+        Assert.Equal(1f, blend.Zoom);
+    }
+
+    [Fact]
+    public void PiecesAreDrawnBetweenTicks()
+    {
+        // Issue #16: sparks and pieces flew at 30 Hz. A new one is drawn where it is.
+        var debris = new Debris(new Random(1));
+        debris.Spark("A", Vector3.Zero, 1, 1f, 3, 3);
+        var piece = debris.Pieces[0];
+        Assert.Equal(piece.Center, piece.CenterAt(Half));
+        Assert.Equal(piece.Orientation, piece.OrientationAt(Half));
+
+        var (center, orientation) = (piece.Center, piece.Orientation);
+        debris.Update(1f);
+        Assert.Equal(Vector3.Lerp(center, piece.Center, Half), piece.CenterAt(Half));
+        Assert.Equal(Quaternion.Slerp(orientation, piece.Orientation, Half), piece.OrientationAt(Half));
+        Assert.Equal(piece.Center, piece.CenterAt(1f));
+    }
+
+    [Fact]
+    public void EffectsAreDrawnBetweenTicks()
+    {
+        // Issue #16: slime drops flew at 30 Hz. A new one is drawn where it is.
+        var effects = new Effects(new Random(1)) { FrameCount = (_, _) => 4 };
+        effects.SpawnDrop("A", Vector3.Zero, Vector3.UnitX, 1f);
+        var drop = effects.All[0];
+        Assert.Equal(drop.Position, drop.PositionAt(Half));
+
+        effects.Update(1f);
+        Assert.Equal(new Vector3(Half, 0f, 0f), drop.PositionAt(Half));
+        Assert.Equal(drop.Position, drop.PositionAt(1f));
     }
 }

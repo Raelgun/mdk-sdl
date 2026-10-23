@@ -417,8 +417,8 @@ public class KurtMovesTests
         };
         Run(kurt, new Input(), Step, camera);
 
-        // Personal tweak (FollowCamera.MaxPushSpeed, 40 u/s): one step pushes him only part of the way,
-        // so a door behind him doesn't "fast-forward" him.
+        // One step pushes him only part of the way (at most 40 u/s): a door behind him doesn't
+        // "fast-forward" him.
         Assert.InRange(start - kurt.Feet.X, 0.01f, 40f * Step + 0.01f);
 
         // A few steps on (4 cut off at 40 u/s), he has gone forward by all of it, the camera with him.

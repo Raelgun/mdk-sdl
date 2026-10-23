@@ -246,12 +246,15 @@ public sealed class Scope
     }
 
     /// <summary>The eye for Kurt's feet and facing.</summary>
-    public Vector3 Eye(Vector3 feet, Vector3 facing)
+    public Vector3 Eye(Vector3 feet, Vector3 facing) => Eye(feet, facing, Pitch);
+
+    /// <summary>The eye for Kurt's feet and facing at <paramref name="pitch"/> (a frame between steps).</summary>
+    public static Vector3 Eye(Vector3 feet, Vector3 facing, float pitch)
     {
         var eye = feet + Vector3.UnitZ * EyeHeight;
-        if (Pitch > 0f)
+        if (pitch > 0f)
         {
-            eye += facing * EyeForward * (1f - MathF.Cos(float.DegreesToRadians(Pitch)));
+            eye += facing * EyeForward * (1f - MathF.Cos(float.DegreesToRadians(pitch)));
         }
 
         return eye;

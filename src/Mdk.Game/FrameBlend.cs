@@ -1,4 +1,6 @@
 using System.Numerics;
+using Mdk.Formats;
+using Mdk.Game.Kurt;
 using Mdk.Game.Objects;
 
 namespace Mdk.Game;
@@ -25,14 +27,29 @@ public sealed class FrameBlend(Blending blending)
     private readonly record struct Pose(Vector3 Feet, float Yaw, int Teleports, MdkObject? Carrier, Vector3 CarrierAt, float CarrierYaw,
         Vector3 CarrierWas, float CarrierYawWas);
 
+    /// <summary>The scope after a step: on or not, its zoom, tilt and clip timer.</summary>
+    private readonly record struct Sight(bool Sniping, float Zoom, float Pitch, float Clip);
+
     private Pose? _previous;
     private Pose _current;
+    private Sight _sightWas;
+    private Sight _sight;
     private float _tick = 1f;
     /// <summary>The scripts' tick count at the last step.</summary>
     private int _ticks;
     /// <summary>What Kurt rides that follows him (drawn moved with him).</summary>
     private MdkObject? _driven;
     private Vector3 _lag;
+    /// <summary>Per model, the pose drawn and its blended parts.</summary>
+    private readonly Dictionary<Model, (Vector3[][] Pose, Vector3[][] Parts)> _poses = [];
+
+    /// <summary>How far a frame is from the last tick to the next (0-1; tests: 1, the tick).</summary>
+    public float Tick => blending == Blending.Off ? 1f : _tick;
+
+    /// <summary>The scope's zoom, tilt and clip timer as drawn.</summary>
+    public float Zoom { get; private set; } = 1f;
+    public float ScopePitch { get; private set; }
+    public float ClipTime { get; private set; }
 
     /// <summary>Kurt's feet and yaw as drawn.</summary>
     public Vector3 Feet { get; private set; }
@@ -50,6 +67,9 @@ public sealed class FrameBlend(Blending blending)
         _ticks = tick;
         var now = new Pose(kurt.Feet, kurt.Yaw, kurt.Teleports, carrier, carrier?.Position ?? Vector3.Zero, carrier?.Yaw ?? 0f,
             carrier?.PositionAt(was) ?? Vector3.Zero, carrier?.YawAt(was) ?? 0f);
+        var sight = new Sight(kurt.Sniping, kurt.Scope.Zoom, kurt.Scope.Pitch, kurt.Scope.ClipTime);
+        _sightWas = _previous == null ? sight : _sight;
+        _sight = sight;
         _previous = _previous == null || now.Teleports != _current.Teleports ? now : _current;
         _current = now;
         _driven = driven;
@@ -74,6 +94,25 @@ public sealed class FrameBlend(Blending blending)
         _tick = tick;
         (Feet, Yaw) = blending == Blending.Off || _previous is not { } from ? (kurt.Feet, kurt.Yaw) : KurtAt(from, _current, step, tick);
         _lag = Feet - kurt.Feet;
+        var scope = kurt.Scope;
+        (Zoom, ScopePitch, ClipTime) = blending == Blending.Off || _previous == null
+            ? (scope.Zoom, scope.Pitch, scope.ClipTime)
+            : ScopeAt(scope, _sightWas, _sight, step);
+    }
+
+    /// <summary>The scope between two steps: the zoom and the clip timer on the way, the tilt with
+    /// the mouse's since the step. Entering it, a shot or a reload (the timer up) are drawn at once.</summary>
+    private static (float Zoom, float Pitch, float Clip) ScopeAt(Scope scope, Sight from, Sight to, float step)
+    {
+        if (from.Sniping != to.Sniping)
+        {
+            return (scope.Zoom, scope.Pitch, scope.ClipTime);
+        }
+
+        // Personal tweak: the scope's full range (Scope.PitchUp, PitchDown), not the original's 50°.
+        var pitch = Math.Clamp(scope.Pitch + Lerp(from.Pitch, to.Pitch, step) - to.Pitch, -Scope.PitchUp, Scope.PitchDown);
+        var clip = to.Clip > from.Clip ? scope.ClipTime : Lerp(from.Clip, to.Clip, step);
+        return (Lerp(from.Zoom, to.Zoom, step), pitch, clip);
     }
 
     /// <summary>An object's transform as drawn.</summary>
@@ -96,6 +135,47 @@ public sealed class FrameBlend(Blending blending)
         }
 
         return obj == _driven ? obj.Position + _lag : obj.PositionAt(_tick);
+    }
+
+    /// <summary>An object's pose as drawn: between its animation's frames (a scratch pose per
+    /// model, kept: no allocation per frame).</summary>
+    public Vector3[][] PoseOf(MdkObject obj)
+    {
+        if (blending == Blending.Off || obj.FramesAt(_tick) is not { } frames)
+        {
+            return obj.PoseParts();
+        }
+
+        var (from, to, share) = frames;
+        if (!_poses.TryGetValue(obj.Model!, out var scratch))
+        {
+            scratch = _poses[obj.Model!] = (new Vector3[to.Length][], new Vector3[to.Length][]);
+        }
+
+        var (pose, parts) = scratch;
+        for (var p = 0; p < to.Length; p++)
+        {
+            // A part the animation leaves still is the model's own.
+            if (from[p] == to[p])
+            {
+                pose[p] = to[p];
+                continue;
+            }
+
+            if (parts[p]?.Length != to[p].Length)
+            {
+                parts[p] = new Vector3[to[p].Length];
+            }
+
+            for (var v = 0; v < to[p].Length; v++)
+            {
+                parts[p][v] = Vector3.Lerp(from[p][v], to[p][v], share);
+            }
+
+            pose[p] = parts[p];
+        }
+
+        return pose;
     }
 
     /// <summary>Where a frame draws a point moving with an object (a rope's end on it).</summary>

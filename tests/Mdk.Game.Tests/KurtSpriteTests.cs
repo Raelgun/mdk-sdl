@@ -1,4 +1,7 @@
 using System.Numerics;
+using Mdk.Engine.Audio;
+using Mdk.Game.Audio;
+using Mdk.Game.Collision;
 using Mdk.Game.Kurt;
 
 namespace Mdk.Game.Tests;
@@ -7,6 +10,8 @@ namespace Mdk.Game.Tests;
 public class KurtSpriteTests
 {
     private static readonly Vector3 Feet = new(100f, 200f, 50f);
+
+    private static readonly AudioDevice Device = new(Output.Muted);
 
     /// <summary>The follow camera: 8 behind, 6 above.</summary>
     private static readonly Vector3 Eye = Feet + new Vector3(0f, -8f, 6f);
@@ -53,6 +58,24 @@ public class KurtSpriteTests
         var moved = Eye + direction * KurtSprite.InFront(Depth, Vector3.Dot(direction * t, Forward));
 
         Assert.True(moved.Z > Feet.Z + top, $"{Feet.Z + top - moved.Z} under the top");
+    }
+
+    /// <summary>damp_animate (0x4646a4) draws K_SIDE unmirrored both ways: the gun stays in his
+    /// right hand. Only the demo's left roll is mirrored.</summary>
+    [Theory]
+    [InlineData(Kurt.Kurt.State.Side, -1f, 1f)]
+    [InlineData(Kurt.Kurt.State.Side, 1f, 1f)]
+    [InlineData(Kurt.Kurt.State.RollLeft, 0f, -1f)]
+    [InlineData(Kurt.Kurt.State.RollRight, 0f, 1f)]
+    public void MirrorsOnlyTheLeftRoll(Kurt.Kurt.State state, float strafe, float mirror)
+    {
+        var kurt = new Kurt.Kurt(new ArenaSpace(), new SoundMixer(Device, _ => null), _ => 1)
+        {
+            Current = state,
+            StrafeSpeed = strafe,
+        };
+
+        Assert.Equal(mirror, KurtSprite.Mirror(kurt));
     }
 
     [Fact]

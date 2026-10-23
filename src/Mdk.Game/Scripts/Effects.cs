@@ -80,6 +80,16 @@ public sealed class Effects(Random rng)
         public float Burst;
         public Vector3 Jitter;
         public bool Done;
+        /// <summary>The place at the start of the last tick; null: new since.</summary>
+        private Vector3? _ticked;
+
+        /// <summary>A tick starts: frames until the next are drawn from here to the tick's.</summary>
+        public void Remember() => _ticked = Position;
+
+        /// <summary>The place <paramref name="alpha"/> of the way from the last tick's start to now
+        /// (a frame between ticks); a wound on an object that jumped is where it is.</summary>
+        public Vector3 PositionAt(float alpha) =>
+            _ticked is { } from && !FrameBlend.Jumped(from, Position, ScriptRuntime.Tick) ? FrameBlend.Lerp(from, Position, alpha) : Position;
 
         /// <summary>The sprite's frame now.</summary>
         public int Frame => Math.Clamp(Frames - 1 - (int)(Life * Speed) % Frames, 0, Frames - 1);
@@ -208,6 +218,7 @@ public sealed class Effects(Random rng)
         using var copy = ListCopy<Effect>.Of(_effects);
         foreach (var effect in copy)
         {
+            effect.Remember();
             switch (effect.Kind)
             {
                 case Kind.Wound:

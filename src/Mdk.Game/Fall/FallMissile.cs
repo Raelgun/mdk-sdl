@@ -117,8 +117,8 @@ public sealed class FallMissile
             towards = Vector3.Normalize(towards);
         }
 
-        // Personal tweak: the original blends once per 1/30 s tick; doing it once per frame made the
-        // steering far stiffer at 60-120 fps, so a missile that missed locked on and hovered by Kurt.
+        // The original blends once per 1/30 s tick: blending once per frame made the steering far
+        // stiffer at 60-120 fps, so a missile that missed locked on and hovered by Kurt.
         var keep = MathF.Pow(1f - Homing, dt * TicksPerSecond);
         Velocity = keep * Velocity + (1f - keep) * Speed * towards;
         return Event.None;

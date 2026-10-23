@@ -6,6 +6,11 @@
 # - LEVEL7's XD2, LEVEL7's XE, LEVEL4's snowboard: Kurt moves smoothly, the ride with him (boarding
 #   the XE or the board, he stepped back).
 # - A console tp and a cutscene cut are drawn at once, never on the way.
+# - Issue #16: the objects' animations (LEVEL3's alien and grunt, the decoy) change every frame,
+#   not every 8th ("blend pose t TYPE_ID x y z": the middle of the pose as drawn); so do the
+#   pieces and the slime of a sniper grenade's kill, and the chain gun's sparks.
+# - Sniper mode, looking up: the zoom, the scope's tilt and the clip change every frame, not
+#   every 4th; the round cameras (the views at the top) every frame, not every 8th.
 # Run from the project folder after `dotnet build`: sh tests/interpolation_test.sh
 # No window: the game draws off screen and never takes the focus.
 export MDK_HIDDEN=1
@@ -29,6 +34,24 @@ check() {
 
 less() {
 	awk "BEGIN { exit !($1 < $2) }"
+}
+
+# What --trace prints besides Kurt: "blend WHAT t ..." lines.
+details() {
+	timeout 180 "$MDK" --mute --trace --fps=240 --screenshot="$SHOT" "$@" 2>&1 | grep "^blend $1 " | cut -d' ' -f3-
+}
+
+run_all() {
+	timeout 180 "$MDK" --mute --trace --fps=240 --screenshot="$SHOT" "$@" 2>&1 | grep "^blend "
+}
+
+# How many changes a series makes, frame to frame ("t id x y z"), and the share of them that
+# follow a change: drawn every frame 1, every 4th (60 Hz) or 8th (30 Hz) 0.
+smooth() {
+	echo "$1" | awk '{ v = $3 " " $4 " " $5; c = ($2 in last) && last[$2] != v
+		if (c) { n++; if (moved[$2]) s++ }
+		moved[$2] = c; last[$2] = v }
+		END { printf "%d %.2f", n, n ? s / n : 0 }'
 }
 
 # Frames on a carrier of that type.
@@ -115,6 +138,35 @@ OUT=$(run --level=5 --at=440,84,-2250,163 --event=52 --wait=2 | awk '$2 > 0.1')
 echo "  cutscene: the camera's jumps and moves on the way $(jumps "$OUT" 8), stutter $(stutter "$OUT" 8)"
 [ "$(jumps "$OUT" 8)" = "1 0" ]; check "a cut is drawn at once" $?
 less "$(stutter "$OUT" 8)" 2; check "the cutscene camera moves smoothly" $?
+
+OUT=$(details pose --level=3 --at=0,120,150,75.5 --wait=2)
+set -- $(smooth "$OUT")
+echo "  animations: $1 changes, $2 after a change"
+[ "$1" -gt 300 ] && less 0.9 "$2"; check "animations are drawn between their frames" $?
+
+OUT=$(details pose --level=3 --at=0,120,150,75.5 --give=SW_DUMMY --use --wait=4 | grep SW_DUMMY)
+set -- $(smooth "$OUT")
+echo "  decoy: $1 changes, $2 after a change"
+[ "$1" -gt 30 ] && less 0.9 "$2"; check "the decoy walks smoothly" $?
+
+OUT=$(run_all --level=3 --at=0,120,150,75.5 --sniper=1,9 --sniper-fire --give=SW_SGREN --wait=4)
+for WHAT in piece effect; do
+	set -- $(smooth "$(echo "$OUT" | grep "^blend $WHAT " | cut -d' ' -f3-)")
+	echo "  grenade's ${WHAT}s: $1 changes, $2 after a change"
+	[ "$1" -gt 200 ] && less 0.9 "$2"; check "the grenade's ${WHAT}s fly smoothly" $?
+done
+
+OUT=$(details piece --level=3 --at=0,120,150,75.5 --fire --wait=4)
+set -- $(smooth "$OUT")
+echo "  sparks: $1 changes, $2 after a change"
+[ "$1" -gt 1000 ] && less 0.9 "$2"; check "the chain gun's sparks fly smoothly" $?
+
+OUT=$(run_all --level=3 --at=0,120,150,75.5 --sniper=1,-30 --zoom=1 --sniper-fire --wait=3)
+for WHAT in scope round; do
+	set -- $(smooth "$(echo "$OUT" | grep "^blend $WHAT " | cut -d' ' -f3-)")
+	echo "  sniper's ${WHAT}: $1 changes, $2 after a change"
+	[ "$1" -gt 30 ] && less 0.9 "$2"; check "the sniper's ${WHAT} moves smoothly" $?
+done
 
 [ $FAILED = 0 ] && echo PASSED && exit 0
 echo FAILED
