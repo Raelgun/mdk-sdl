@@ -1,7 +1,9 @@
 #!/bin/sh
 # Kurt's other moves against the Godot port's numbers (godot-mdk, --headless, same options):
 # - level 3: running and jumping east he grabs the ledge at x 83, climbs it and runs on to the wall
-#   (Godot: 93, 446, 145; the y comes from facing the ledge's edge, 15°);
+#   (Godot: 93, 446, 145; the y comes from facing the ledge's edge, 15°). Jump held past the top
+#   opens the chute there (0x4646a4), and he grabs the ledge under it as the original does
+#   (damp_ledge_grab 0x469868 ignores the chute), sinking to it at 8 u/s: hanging by 2 s, not 1.8;
 # - level 6: the first wind zone slides him down the tunnel (Godot after 4 and 6 s: -1138, -599,
 #   -185 and -1138, -498, -241: on that line);
 # - level 7: the wall behind him pushes him away from it (camera_clearance; Godot: x 7.0, below 9);
@@ -30,9 +32,9 @@ xyz() {
 }
 
 LEDGE="--level=3 --at=67.6,441.8,133.5,0 --delay=0.5 --walk=3 --jump"
-OUT=$(run $LEDGE --wait=1.8)
+OUT=$(run $LEDGE --wait=2)
 echo "$OUT"
-echo "$OUT" | grep -q " Hang floor False" ; check $? "hangs from the ledge"
+echo "$OUT" | grep -q " Hang floor False" ; check $? "hangs from the ledge (under the chute)"
 OUT=$(run $LEDGE --wait=5)
 echo "$OUT"
 set -- $(xyz "$OUT")
