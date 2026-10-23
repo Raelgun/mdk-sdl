@@ -53,6 +53,14 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
     private const float JumpReleasePenalty = 3.333f;
     /// <summary>Falling faster than this starts the fall (or with jump held, opens the chute).</summary>
     private const float FallStartSpeed = -16f;
+    /// <summary>The jumps' frames (0x4646a4): the first ones play one a tick, then frame n waits for the
+    /// vertical speed to drop to <see cref="JumpSpeeds"/>[n]; past the last comes the fall.</summary>
+    private const int JumpTimedFrames = 10;
+    private const int JumpFrames = 16;
+    private const int RunJumpTimedFrames = 7;
+    private const int RunJumpFrames = 12;
+    /// <summary>The jumps' frame speeds (0x492030; the running jump's 0x492074 is the same to frame 12).</summary>
+    private static readonly float[] JumpSpeeds = [25f, 26f, 27f, 20f, 15f, 13f, 9f, 6.6f, 4f, 0.2f, -3f, -6.3f, -10f, -14f, -17f, -20f];
     private const float ChuteGravity = 21.33f;
     private const float ChuteFallSpeed = -8f;
     private const float ChuteBrake = 256f;
@@ -67,6 +75,13 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
     private const float CreepSpeed = 0.35f * Ticks;
     /// <summary>Downhill glue: on floors flatter than this the feet follow the slope down.</summary>
     private const float GlueNz = 0.25f;
+    /// <summary>The glue's fastest drop (u/s), under the hard landing's: the landing that follows it
+    /// must not hurt.</summary>
+    private const float GlueMaxSpeed = 90f;
+    /// <summary>Running, or standing, Kurt starts the fall animation only after this long (seconds) off
+    /// the floor: down a steep slope his feet leave it for a step or two at a time, and the animation
+    /// flipped between the run and the fall.</summary>
+    private const float FallGrace = 0.15f;
     /// <summary>Falling onto a platform first goes to 0.05 above its top (damp_gravity).</summary>
     private const float PlatformLift = 0.05f;
     /// <summary>Objects this far around a move (and Kurt's height above it) may stop it.</summary>
@@ -134,6 +149,16 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
 
     /// <summary>One step of <paramref name="delta"/> seconds.</summary>
     public void Update(Input input, float delta)
+    {
+        // The scope's own bindings (zoom, the wheel) apply while he snipes, whatever else this step does.
+        input.Scoped = Sniping;
+        UpdateStep(input, delta);
+        // Entering or leaving the scope this step switches the bindings now, not a step late: a wheel
+        // notch right after the sniper key zooms (or, rebound, does its scope action).
+        input.Scoped = Sniping;
+    }
+
+    private void UpdateStep(Input input, float delta)
     {
         _mouseTurn = MouseTurn.None;
         Invulnerable = MathF.Max(Invulnerable - delta, 0f);
@@ -406,7 +431,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
             }
             else
             {
-                GlueDownhill(move, delta);
+                GlueDownhill(move, delta, exact: true);
             }
         }
         else
@@ -419,7 +444,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
     }
 
     /// <summary>In the air: the jump's hold time runs out; held jump opens the chute when falling
-    /// fast, letting go closes it.</summary>
+    /// fast or past a jump's top, letting go closes it.</summary>
     private void UpdateAir(bool jumpHeld, float delta)
     {
         if (_jumpTicksLeft > 0)
@@ -427,7 +452,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
             _jumpTicksLeft = Math.Max(0, _jumpTicksLeft - (int)MathF.Ceiling(delta * Ticks));
         }
 
-        if (!ChuteOpen && jumpHeld && VerticalSpeed < FallStartSpeed)
+        if (!ChuteOpen && jumpHeld && (VerticalSpeed < FallStartSpeed || _pastJumpTop))
         {
             ChuteOpen = true;
             mixer.Play("CHUTEOUT");
@@ -473,14 +498,18 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
     /// teleport, a ride, a cutscene or the level's end (it played on until the level ended).</summary>
     private void StopChuteSound() => mixer.Stop(ChuteOnSound);
 
-    /// <summary>On a floor flatter than 75°, walking downhill keeps the feet on it.</summary>
-    private void GlueDownhill(Vector3 move, float delta)
+    /// <summary>On a floor flatter than 75°, walking downhill keeps the feet on it. With
+    /// <paramref name="exact"/>, the feet follow the slope's whole drop (the move along the slope over
+    /// the normal's z), not only its share along the normal: on a steep floor the feet stayed above it
+    /// every other step, and Kurt flickered between the run and the fall.</summary>
+    private void GlueDownhill(Vector3 move, float delta, bool exact = false)
     {
         var n = _floorNormal.Z < 0f ? -_floorNormal : _floorNormal;
         var downhill = move.X * n.X + move.Y * n.Y;
         if (n.Z > GlueNz && downhill > 0f)
         {
-            VerticalSpeed = MathF.Min(VerticalSpeed, -downhill / delta);
+            var speed = (exact ? downhill / n.Z : downhill) / delta;
+            VerticalSpeed = MathF.Min(VerticalSpeed, -MathF.Min(speed, exact ? GlueMaxSpeed : speed));
         }
 
         VerticalSpeed = MathF.Max(VerticalSpeed - Gravity * delta, -MaxFallSpeed);
@@ -619,9 +648,20 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
         }
     }
 
+    /// <summary>How long Kurt has been off the floor (seconds).</summary>
+    private float _airFor;
+    /// <summary>A jump's frames that follow the speed reached its top (0x573a48): the chute may open,
+    /// without waiting to fall faster than <see cref="FallStartSpeed"/>.</summary>
+    private bool _pastJumpTop;
+
     private void UpdateState(float forward, float strafe, float delta)
     {
         StateTime += delta;
+        _airFor = OnFloor ? 0f : _airFor + delta;
+        if (OnFloor || (VerticalSpeed > 0f && !ChuteOpen))
+        {
+            _pastJumpTop = false;
+        }
         if (UpdateCombatState(delta))
         {
             return;
@@ -645,7 +685,9 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
             {
                 SetState(MathF.Abs(ForwardSpeed) > MovingSpeed ? State.RunJump : State.Jump);
             }
-            else if (VerticalSpeed < FallStartSpeed && (Current is not (State.Jump or State.RunJump) || done))
+            // A jump falls when its frames run out (Animate), as the original's priorities have it.
+            else if (VerticalSpeed < FallStartSpeed && Current is not (State.Jump or State.RunJump)
+                && (_airFor >= FallGrace || Current == State.Fall))
             {
                 SetState(State.Fall);
             }
@@ -703,9 +745,38 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
             case State.Turn:
                 AnimationFrame = Yaw / TurnFrameDegrees * frameCount(State.Turn);
                 break;
+            case State.Jump or State.RunJump:
+                AnimateJump(delta);
+                break;
             default:
                 AnimationFrame += Ticks * delta;
                 break;
+        }
+    }
+
+    /// <summary>A jump's frames (0x4646a4): timed, then following the vertical speed down through its
+    /// top, then the fall. Played through by time, the jump ended while Kurt still rose, and he hung on
+    /// its last frame until falling fast enough.</summary>
+    private void AnimateJump(float delta)
+    {
+        var (timed, frames) = Current == State.Jump ? (JumpTimedFrames, JumpFrames) : (RunJumpTimedFrames, RunJumpFrames);
+        if (AnimationFrame < timed)
+        {
+            AnimationFrame = MathF.Min(AnimationFrame + Ticks * delta, timed);
+            return;
+        }
+
+        var frame = (int)AnimationFrame;
+        while (frame < frames && VerticalSpeed <= JumpSpeeds[frame])
+        {
+            frame++;
+        }
+
+        AnimationFrame = frame;
+        _pastJumpTop |= VerticalSpeed <= 0f;
+        if (frame >= frames)
+        {
+            SetState(State.Fall);
         }
     }
 

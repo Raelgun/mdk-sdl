@@ -288,10 +288,10 @@ public sealed class MdkObject : ISoundSource
         Matrix4x4.CreateScale(Scale) * ((Flags & FlagRolling) != 0 ? RollingBasis : Rotation) * Matrix4x4.CreateTranslation(Position + Vector3.UnitZ * Lift);
 
     /// <summary>The pose at the start of the last tick (<see cref="Remember"/>); null: none yet.</summary>
-    private (Vector3 Position, float Yaw, float Pitch, float Roll, string Arena)? _ticked;
+    private (Vector3 Position, float Yaw, float Pitch, float Roll, string Arena, ModelAnimation? Animation, float AnimationTime)? _ticked;
 
     /// <summary>A tick starts: frames until the next are drawn from this pose to the tick's.</summary>
-    public void Remember() => _ticked = (Position, Yaw, Pitch, Roll, Arena);
+    public void Remember() => _ticked = (Position, Yaw, Pitch, Roll, Arena, Animation, AnimationTime);
 
     /// <summary>Whether frames draw it between ticks: not when new, after a jump or in another arena.</summary>
     private bool Blends(float alpha) =>
@@ -315,6 +315,35 @@ public sealed class MdkObject : ISoundSource
             ? RollingBasis
             : RotationOf(FrameBlend.LerpAngle(from.Roll, Roll, alpha), FrameBlend.LerpAngle(from.Pitch, Pitch, alpha), FrameBlend.LerpAngle(from.Yaw, Yaw, alpha));
         return Matrix4x4.CreateScale(Scale) * rotation * Matrix4x4.CreateTranslation(PositionAt(alpha) + Vector3.UnitZ * Lift);
+    }
+
+    /// <summary>The animation frames drawn <paramref name="alpha"/> of the way from the last tick's
+    /// start to now, and the share of the second (a loop goes on to its first frame); null: the
+    /// current pose (no tick yet, another animation, a restart, a frame set by a script).</summary>
+    public (Vector3[][] From, Vector3[][] To, float Share)? FramesAt(float alpha)
+    {
+        if (!Blends(alpha) || Model == null || Animation is not { FrameCount: > 0 } animation || _ticked!.Value.Animation != animation)
+        {
+            return null;
+        }
+
+        var count = animation.FrameCount;
+        var from = _ticked.Value.AnimationTime;
+        var to = AnimationTime;
+        if (to < from && (Flags & FlagLoop) != 0)
+        {
+            to += count;
+        }
+
+        if (to < from || (int)MathF.Round(AnimationTime) % count != AnimationFrame)
+        {
+            return null;
+        }
+
+        var time = FrameBlend.Lerp(from, to, alpha);
+        var frame = (int)time;
+        var frames = Bake(Model, animation);
+        return (frames[frame % count], frames[(frame + 1) % count], time - frame);
     }
 
     /// <summary>A rolling object rests on its origin but its model is lifted by the height offset
@@ -570,7 +599,9 @@ public sealed class MdkObject : ISoundSource
     public int FindPart(string name) =>
         Model?.PartList.FindIndex(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) ?? -1;
 
-    /// <summary>World position of a model reference point (the attachment points obj+0x1b0).</summary>
+    /// <summary>World position of a model reference point (the attachment points obj+0x1b0), where the
+    /// current animation frame has it (animations keep each point's place per frame): LEVEL7's soldiers
+    /// hanging in a chain (XG) raise the hand they hang by, so rest-pose points bunched the chain up.</summary>
     public Vector3 ReferencePoint(int index)
     {
         if (Model == null || index >= Model.ReferencePoints.Count)
@@ -578,15 +609,38 @@ public sealed class MdkObject : ISoundSource
             return Position;
         }
 
-        return Position + Vector3.Transform(Model.ReferencePoints[index] * Scale, Matrix4x4.CreateRotationZ(float.DegreesToRadians(Yaw)));
+        var point = Model.ReferencePoints[index];
+        if (Animation is { FrameCount: > 0 } animation && index < animation.ReferencePoints.Count)
+        {
+            var frames = animation.ReferencePoints[index];
+            point = frames[Math.Clamp(AnimationFrame, 0, frames.Length - 1)];
+        }
+
+        return Position + Vector3.Transform(point * Scale, Matrix4x4.CreateRotationZ(float.DegreesToRadians(Yaw)));
     }
 
-    /// <summary>World position of the centre of a model part (rest pose).</summary>
+    /// <summary>World position of the centre of a model part, in the current pose as drawn: an animated
+    /// model's parts stand where the animation puts them (the rest pose can leave them at the origin,
+    /// e.g. LEVEL7's boss XB1, whose GUN rested at his feet so its BIGBOLTs hit the floor at once).</summary>
     public Vector3 PartCenter(int part)
     {
         if (part < 0 || Model == null)
         {
             return Position;
+        }
+
+        var pose = PoseParts();
+        if (part < pose.Length && pose[part].Length > 0)
+        {
+            var min = new Vector3(float.MaxValue);
+            var max = new Vector3(float.MinValue);
+            foreach (var vertex in pose[part])
+            {
+                min = Vector3.Min(min, vertex);
+                max = Vector3.Max(max, vertex);
+            }
+
+            return Vector3.Transform((min + max) / 2f, Transform);
         }
 
         var bounds = Model.PartList[part].Bounds;

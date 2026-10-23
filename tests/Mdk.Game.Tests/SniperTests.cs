@@ -320,15 +320,37 @@ public class SniperTests
         var kurt = StandingKurt();
         var health = Inventory.MaxHealth;
         kurt.Inventory.Collect("SW_HOME", ref health);
-        kurt.EnterSniper();
+
+        // The sniper key, then a wheel notch before the next step: it already zooms.
+        var input = new Input();
+        input.Hold(Key.Sniper, Input.State.Down);
+        kurt.Update(input, Step);
+        Assert.True(kurt.Sniping);
         var ammo = kurt.Inventory.SelectedAmmo;
         var zoom = kurt.Scope.Zoom;
 
-        var input = new Input();
         input.AddWheel(1f);
         kurt.Update(input, Step);
         Assert.Equal(ammo, kurt.Inventory.SelectedAmmo);
         Assert.NotEqual(zoom, kurt.Scope.Zoom);
+    }
+
+    [DataFact]
+    public void ReboundWheelDoesntZoomRightAfterTheSniperKey()
+    {
+        var kurt = StandingKurt();
+        var input = new Input();
+        Assert.True(input.Bind(Key.Jump, "Wheel up"));
+        input.Hold(Key.Sniper, Input.State.Down);
+        kurt.Update(input, Step);
+        Assert.True(kurt.Sniping);
+        var zoom = kurt.Scope.Zoom;
+
+        input.AddWheel(1f);
+        Assert.Equal(0f, input.ZoomWheel);
+        Assert.True(input.IsDown(Key.Jump));
+        kurt.Update(input, Step);
+        Assert.Equal(zoom, kurt.Scope.Zoom);
     }
 
     private static readonly MdkData Data = MdkData.Find() ?? throw new InvalidOperationException("MDK data not found");
