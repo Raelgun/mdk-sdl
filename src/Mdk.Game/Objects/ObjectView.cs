@@ -57,15 +57,17 @@ public sealed class ObjectView(Renderer renderer, MaterialResolver resolver)
 
     public void Draw(MdkObject obj, Look look) => Draw(obj, look, obj.Transform);
 
-    /// <summary>Draws an object placed by <paramref name="transform"/> (a frame between ticks).</summary>
-    public void Draw(MdkObject obj, Look look, Matrix4x4 transform)
+    public void Draw(MdkObject obj, Look look, Matrix4x4 transform) => Draw(obj, look, transform, obj.PoseParts());
+
+    /// <summary>Draws an object placed by <paramref name="transform"/> in <paramref name="pose"/>
+    /// (a frame between ticks).</summary>
+    public void Draw(MdkObject obj, Look look, Matrix4x4 transform, Vector3[][] pose)
     {
         if (obj.Model == null || obj.Dead || LayoutOf(obj.Model, look) is not { } layout)
         {
             return;
         }
 
-        var pose = obj.PoseParts();
         var hidden = obj.HiddenParts;
         var swap = Swaps?.Of(obj.Model);
         swap?.Pose(pose, hidden);

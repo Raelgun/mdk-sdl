@@ -288,10 +288,10 @@ public sealed class MdkObject : ISoundSource
         Matrix4x4.CreateScale(Scale) * ((Flags & FlagRolling) != 0 ? RollingBasis : Rotation) * Matrix4x4.CreateTranslation(Position + Vector3.UnitZ * Lift);
 
     /// <summary>The pose at the start of the last tick (<see cref="Remember"/>); null: none yet.</summary>
-    private (Vector3 Position, float Yaw, float Pitch, float Roll, string Arena)? _ticked;
+    private (Vector3 Position, float Yaw, float Pitch, float Roll, string Arena, ModelAnimation? Animation, float AnimationTime)? _ticked;
 
     /// <summary>A tick starts: frames until the next are drawn from this pose to the tick's.</summary>
-    public void Remember() => _ticked = (Position, Yaw, Pitch, Roll, Arena);
+    public void Remember() => _ticked = (Position, Yaw, Pitch, Roll, Arena, Animation, AnimationTime);
 
     /// <summary>Whether frames draw it between ticks: not when new, after a jump or in another arena.</summary>
     private bool Blends(float alpha) =>
@@ -315,6 +315,35 @@ public sealed class MdkObject : ISoundSource
             ? RollingBasis
             : RotationOf(FrameBlend.LerpAngle(from.Roll, Roll, alpha), FrameBlend.LerpAngle(from.Pitch, Pitch, alpha), FrameBlend.LerpAngle(from.Yaw, Yaw, alpha));
         return Matrix4x4.CreateScale(Scale) * rotation * Matrix4x4.CreateTranslation(PositionAt(alpha) + Vector3.UnitZ * Lift);
+    }
+
+    /// <summary>The animation frames drawn <paramref name="alpha"/> of the way from the last tick's
+    /// start to now, and the share of the second (a loop goes on to its first frame); null: the
+    /// current pose (no tick yet, another animation, a restart, a frame set by a script).</summary>
+    public (Vector3[][] From, Vector3[][] To, float Share)? FramesAt(float alpha)
+    {
+        if (!Blends(alpha) || Model == null || Animation is not { FrameCount: > 0 } animation || _ticked!.Value.Animation != animation)
+        {
+            return null;
+        }
+
+        var count = animation.FrameCount;
+        var from = _ticked.Value.AnimationTime;
+        var to = AnimationTime;
+        if (to < from && (Flags & FlagLoop) != 0)
+        {
+            to += count;
+        }
+
+        if (to < from || (int)MathF.Round(AnimationTime) % count != AnimationFrame)
+        {
+            return null;
+        }
+
+        var time = FrameBlend.Lerp(from, to, alpha);
+        var frame = (int)time;
+        var frames = Bake(Model, animation);
+        return (frames[frame % count], frames[(frame + 1) % count], time - frame);
     }
 
     /// <summary>A rolling object rests on its origin but its model is lifted by the height offset

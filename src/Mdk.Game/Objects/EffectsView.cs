@@ -38,8 +38,9 @@ public sealed class EffectsView(Renderer renderer, MaterialResolver resolver, Le
     private readonly string[] _spriteName = new string[1];
     private readonly List<(Vector3 Position, Vector2 Uv)> _ribbon = [];
 
-    /// <summary>Queues everything for <paramref name="camera"/>.</summary>
-    public void Draw(ScriptRuntime scripts, View camera)
+    /// <summary>Queues everything for <paramref name="camera"/>, the pieces and effects
+    /// <paramref name="tick"/> of the way from the last tick's start to now (0-1).</summary>
+    public void Draw(ScriptRuntime scripts, View camera, float tick)
     {
         _vertices.Clear();
         _draws.Clear();
@@ -50,7 +51,7 @@ public sealed class EffectsView(Renderer renderer, MaterialResolver resolver, Le
         var right = Vector3.Normalize(new Vector3(m.M11, m.M21, m.M31));
         var billboardUp = Vector3.Cross(right, forward);
 
-        AddPieces(scripts.Debris.Pieces, forward);
+        AddPieces(scripts.Debris.Pieces, forward, tick);
         var effects = scripts.Effects.All;
         for (var i = 0; i < effects.Count; i++)
         {
@@ -59,7 +60,7 @@ public sealed class EffectsView(Renderer renderer, MaterialResolver resolver, Le
             if (sprite is { } s)
             {
                 var texel = effect.Scale / Effects.TexelsPerUnit;
-                AddQuad(effect.Position, right * texel, billboardUp * texel, s, effect.Frame);
+                AddQuad(effect.PositionAt(tick), right * texel, billboardUp * texel, s, effect.Frame);
             }
         }
 
@@ -95,7 +96,7 @@ public sealed class EffectsView(Renderer renderer, MaterialResolver resolver, Le
     }
 
     /// <summary>Pieces' triangles batched by surface; sparks' by palette colour.</summary>
-    private void AddPieces(IReadOnlyList<Debris.Piece> pieces, Vector3 forward)
+    private void AddPieces(IReadOnlyList<Debris.Piece> pieces, Vector3 forward, float tick)
     {
         _pieceOrder.Clear();
         _pieceBatch.Clear();
@@ -103,11 +104,13 @@ public sealed class EffectsView(Renderer renderer, MaterialResolver resolver, Le
         {
             var piece = pieces[p];
             var look = LookOf(piece.Arena);
+            var center = piece.CenterAt(tick);
+            var orientation = piece.OrientationAt(tick);
             for (var t = 0; t < piece.Corners.Count / 3; t++)
             {
-                var a = Vector3.Transform(piece.Corners[t * 3], piece.Orientation);
-                var b = Vector3.Transform(piece.Corners[t * 3 + 1], piece.Orientation);
-                var c = Vector3.Transform(piece.Corners[t * 3 + 2], piece.Orientation);
+                var a = Vector3.Transform(piece.Corners[t * 3], orientation);
+                var b = Vector3.Transform(piece.Corners[t * 3 + 1], orientation);
+                var c = Vector3.Transform(piece.Corners[t * 3 + 2], orientation);
                 var surface = piece.IsSpark ? SparkSurface(piece, look.Palette, a, b, c, forward) : PieceSurface(piece, t, look);
                 if (surface is not { } s)
                 {
@@ -119,9 +122,9 @@ public sealed class EffectsView(Renderer renderer, MaterialResolver resolver, Le
                 // UVs are in texels of the texture.
                 var scale = s.Texture == null ? Vector2.Zero : new Vector2(1f / s.Texture.Width, 1f / s.Texture.Height);
                 Vector2 Uv(int k) => piece.IsSpark ? Vector2.Zero : piece.Uvs[t * 3 + k] * scale;
-                vertices.Add(new Vertex(piece.Center + a, Uv(0)));
-                vertices.Add(new Vertex(piece.Center + b, Uv(1)));
-                vertices.Add(new Vertex(piece.Center + c, Uv(2)));
+                vertices.Add(new Vertex(center + a, Uv(0)));
+                vertices.Add(new Vertex(center + b, Uv(1)));
+                vertices.Add(new Vertex(center + c, Uv(2)));
             }
         }
 
