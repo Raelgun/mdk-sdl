@@ -570,7 +570,9 @@ public sealed class MdkObject : ISoundSource
     public int FindPart(string name) =>
         Model?.PartList.FindIndex(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) ?? -1;
 
-    /// <summary>World position of a model reference point (the attachment points obj+0x1b0).</summary>
+    /// <summary>World position of a model reference point (the attachment points obj+0x1b0), where the
+    /// current animation frame has it (animations keep each point's place per frame): LEVEL7's soldiers
+    /// hanging in a chain (XG) raise the hand they hang by, so rest-pose points bunched the chain up.</summary>
     public Vector3 ReferencePoint(int index)
     {
         if (Model == null || index >= Model.ReferencePoints.Count)
@@ -578,15 +580,38 @@ public sealed class MdkObject : ISoundSource
             return Position;
         }
 
-        return Position + Vector3.Transform(Model.ReferencePoints[index] * Scale, Matrix4x4.CreateRotationZ(float.DegreesToRadians(Yaw)));
+        var point = Model.ReferencePoints[index];
+        if (Animation is { FrameCount: > 0 } animation && index < animation.ReferencePoints.Count)
+        {
+            var frames = animation.ReferencePoints[index];
+            point = frames[Math.Clamp(AnimationFrame, 0, frames.Length - 1)];
+        }
+
+        return Position + Vector3.Transform(point * Scale, Matrix4x4.CreateRotationZ(float.DegreesToRadians(Yaw)));
     }
 
-    /// <summary>World position of the centre of a model part (rest pose).</summary>
+    /// <summary>World position of the centre of a model part, in the current pose as drawn: an animated
+    /// model's parts stand where the animation puts them (the rest pose can leave them at the origin,
+    /// e.g. LEVEL7's boss XB1, whose GUN rested at his feet so its BIGBOLTs hit the floor at once).</summary>
     public Vector3 PartCenter(int part)
     {
         if (part < 0 || Model == null)
         {
             return Position;
+        }
+
+        var pose = PoseParts();
+        if (part < pose.Length && pose[part].Length > 0)
+        {
+            var min = new Vector3(float.MaxValue);
+            var max = new Vector3(float.MinValue);
+            foreach (var vertex in pose[part])
+            {
+                min = Vector3.Min(min, vertex);
+                max = Vector3.Max(max, vertex);
+            }
+
+            return Vector3.Transform((min + max) / 2f, Transform);
         }
 
         var bounds = Model.PartList[part].Bounds;

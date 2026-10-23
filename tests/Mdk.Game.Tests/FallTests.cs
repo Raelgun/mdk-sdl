@@ -157,6 +157,47 @@ public class FallTests
     }
 
     [Fact]
+    public void MissilesHomeAsFastAt120FpsAsAt30()
+    {
+        // The homing blends once per 1/30 s tick (0.8 v + 0.2 aim): frames between ticks don't stiffen it.
+        // Free until tick 59, then 3 ticks of homing: mid-turn, where per-frame blending turned the
+        // 120 fps missile about 76 degrees off the 30 fps one (about 12 with the blend per tick).
+        const int Ticks = 62;
+        const int Frames = 4;
+        const float MaxDegrees = 20f;
+        var kurt = new Vector3(0f, 0f, 2000f);
+        var atTicks = new FallMissile(0f, new Random(1));
+        var atFrames = new FallMissile(0f, new Random(1));
+        for (var tick = 0; tick < Ticks; tick++)
+        {
+            atTicks.Update(1f / FallSim.TicksPerSecond, 1, kurt);
+            for (var frame = 0; frame < Frames; frame++)
+            {
+                atFrames.Update(1f / (FallSim.TicksPerSecond * Frames), frame == 0 ? 1 : 0, kurt);
+            }
+        }
+
+        var cos = Vector3.Dot(Vector3.Normalize(atTicks.Velocity), Vector3.Normalize(atFrames.Velocity));
+        Assert.True(float.RadiansToDegrees(MathF.Acos(Math.Clamp(cos, -1f, 1f))) < MaxDegrees);
+    }
+
+    [Fact]
+    public void AHitExplodesOnKurt()
+    {
+        // The explosion goes off at Kurt's position, not where the missile met his box (up to 4
+        // units to his side), and follows him down.
+        var sim = NewFall();
+        Run(sim, 5f);
+        while (sim.Explosions.Count == 0 && sim.Time < FallSim.SteerTime)
+        {
+            sim.Update(Step, Vector2.Zero);
+        }
+
+        var explosion = Assert.Single(sim.Explosions);
+        Assert.Equal(sim.KurtPosition, explosion.Position);
+    }
+
+    [Fact]
     public void RadarBeamReachesItsSpot()
     {
         // Rings 1-3 halve the way to the spot (0x412af8), ring 4 is the spot itself.
@@ -191,5 +232,28 @@ public class FallTests
         Assert.Equal(new System.Drawing.RectangleF(0f, 0f, 480f, 360f), screen);
         Assert.Equal(new System.Drawing.RectangleF(272f, 644f, 480f, 360f), texels);
         Assert.Equal(200f, FallGround.CentreRow(FallSim.EndTime), 3);
+    }
+
+    [Theory]
+    [InlineData(0, 1f)]
+    [InlineData(1, 1.25f)]
+    [InlineData(2, 1.2f)]
+    [InlineData(5, 1f)]
+    [InlineData(19, 0.5f)]
+    [InlineData(31, 1f / 26f)]
+    public void TrailsSwellBehindTheMissileThenTaper(int age, float width) =>
+        // The original's trail (0x439454): its widths by a point's age in ticks (0x491d64, then linear).
+        Assert.Equal(width, FallView.TrailWidth(age), 4);
+
+    [Fact]
+    public void TrailsTurnYellowAndOpaqueOverTheirLastEightSegments()
+    {
+        // 0x410874's translucent table: white at 215, then blue 255 down to 31, alpha up to 250.
+        const int Count = 32;
+        Assert.Equal(Engine.Render.Vertex.Rgba(255, 255, 255, 215), FallView.TrailColour(1, Count));
+        Assert.Equal(Engine.Render.Vertex.Rgba(255, 255, 255, 215), FallView.TrailColour(23, Count));
+        Assert.Equal(Engine.Render.Vertex.Rgba(255, 255, 255, 215), FallView.TrailColour(24, Count));
+        Assert.Equal(Engine.Render.Vertex.Rgba(255, 255, 223, 220), FallView.TrailColour(25, Count));
+        Assert.Equal(Engine.Render.Vertex.Rgba(255, 255, 31, 250), FallView.TrailColour(31, Count));
     }
 }

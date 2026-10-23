@@ -16,6 +16,7 @@ public sealed class FallMissile
     private enum Phase { Free, Homing, Passed }
 
     private const float Speed = 250f;
+    private const float TicksPerSecond = 30f;
     private const int FreeTicks = 60;
     private const float PassHeight = 5f;
     private const int GoneTicks = 60;
@@ -36,11 +37,16 @@ public sealed class FallMissile
     private readonly Vector2 _offset;
     /// <summary>The last points, for the smoke trail.</summary>
     private readonly List<Vector3> _trail = [];
+    /// <summary>The velocity at each trail point: the ribbon there keeps the missile's turn (0x4392a4).</summary>
+    private readonly List<Vector3> _headings = [];
     private Phase _phase = Phase.Free;
     /// <summary>Ticks left free, or since it passed.</summary>
     private float _ticks = FreeTicks;
 
     public IReadOnlyList<Vector3> Trail => _trail;
+
+    /// <summary>The missile's velocity at each <see cref="Trail"/> point.</summary>
+    public IReadOnlyList<Vector3> TrailHeadings => _headings;
 
     /// <summary>Launched from the origin in a random direction, climbing, with a random aim offset
     /// of ±<paramref name="spread"/>.</summary>
@@ -65,11 +71,13 @@ public sealed class FallMissile
         for (var i = 0; i < ticks; i++)
         {
             _trail.Add(Position);
+            _headings.Add(Velocity);
         }
 
         if (_trail.Count > TrailPoints)
         {
             _trail.RemoveRange(0, _trail.Count - TrailPoints);
+            _headings.RemoveRange(0, _headings.Count - TrailPoints);
         }
 
         switch (_phase)
@@ -83,7 +91,7 @@ public sealed class FallMissile
 
                 return Event.None;
             case Phase.Homing:
-                return Home(kurt);
+                return Home(kurt, dt);
             default:
                 _ticks += ticks;
                 return _ticks > GoneTicks ? Event.Gone : Event.None;
@@ -92,7 +100,7 @@ public sealed class FallMissile
 
     /// <summary>Steers towards a point below Kurt (deeper the farther below him it is), until it's 5
     /// units above him.</summary>
-    private Event Home(Vector3 kurt)
+    private Event Home(Vector3 kurt, float dt)
     {
         var dz = kurt.Z - Position.Z;
         if (dz <= -PassHeight)
@@ -109,7 +117,10 @@ public sealed class FallMissile
             towards = Vector3.Normalize(towards);
         }
 
-        Velocity = (1f - Homing) * Velocity + Homing * Speed * towards;
+        // The original blends once per 1/30 s tick: blending once per frame made the steering far
+        // stiffer at 60-120 fps, so a missile that missed locked on and hovered by Kurt.
+        var keep = MathF.Pow(1f - Homing, dt * TicksPerSecond);
+        Velocity = keep * Velocity + (1f - keep) * Speed * towards;
         return Event.None;
     }
 }

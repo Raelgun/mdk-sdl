@@ -459,8 +459,9 @@ public sealed class ObjectMotion(ScriptRuntime runtime)
 
     /// <summary>A chain link (movement command 30, spawn_chain): the links hang off the head object,
     /// each turned 90° more than the one before, with its first reference point on the previous one's
-    /// second. Only the first link (id 0) places the chain; a link whose leader or any link before it
-    /// is gone detaches and stops.</summary>
+    /// second (or its only one: LEVEL7's ship XE has just the hook under it, and its bomb or soldiers
+    /// hung from its centre, inside it). Only the first link (id 0) places the chain; a link whose
+    /// leader or any link before it is gone detaches and stops.</summary>
     private void UpdateChain(MdkObject link)
     {
         const float LinkTurn = 90f;
@@ -493,7 +494,8 @@ public sealed class ObjectMotion(ScriptRuntime runtime)
         {
             var current = links[i];
             current.Yaw = Wrap360(leader.Yaw + LinkTurn * i);
-            current.Position += previous.ReferencePoint(1) - current.ReferencePoint(0);
+            var hook = previous.Model is { ReferencePoints.Count: < 2 } ? 0 : 1;
+            current.Position += previous.ReferencePoint(hook) - current.ReferencePoint(0);
             previous = current;
         }
     }

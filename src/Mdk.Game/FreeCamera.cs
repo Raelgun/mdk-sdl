@@ -34,6 +34,8 @@ public sealed class FreeCamera
 
     public void Update(Input input, float delta)
     {
+        // The flying camera never snipes: the scope's bindings don't apply.
+        input.Scoped = false;
         Yaw -= input.MouseX * MouseDegrees;
         Pitch = Math.Clamp(Pitch - input.MouseY * MouseDegrees, -PitchLimit, PitchLimit);
 
