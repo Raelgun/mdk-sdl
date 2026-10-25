@@ -174,6 +174,7 @@ public sealed unsafe partial class Renderer
             uniforms.Lights[i * LightVectors + 1] = new Vector4(light.Colour, 0f);
         }
 
+        _lightUniforms = uniforms;
         SDL_PushGPUFragmentUniformData(commands, LightSlot, (IntPtr)(&uniforms), (uint)sizeof(LightUniforms));
     }
 
@@ -259,7 +260,7 @@ public sealed unsafe partial class Renderer
         texture = _msaaDepth != null ? _msaaDepth : _depth,
         clear_depth = 1f,
         load_op = SDL_GPULoadOp.SDL_GPU_LOADOP_CLEAR,
-        store_op = SDL_GPUStoreOp.SDL_GPU_STOREOP_DONT_CARE,
+        store_op = DepthStore,
         stencil_load_op = SDL_GPULoadOp.SDL_GPU_LOADOP_DONT_CARE,
         stencil_store_op = SDL_GPUStoreOp.SDL_GPU_STOREOP_DONT_CARE,
     };
@@ -324,21 +325,21 @@ public sealed unsafe partial class Renderer
     private const SDL_GPUTextureUsageFlags SampledDepthUsage =
         SDL_GPUTextureUsageFlags.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET | SDL_GPUTextureUsageFlags.SDL_GPU_TEXTUREUSAGE_SAMPLER;
 
-    private void RenderEnhanced(SDL_GPUCommandBuffer* commands, View view, Vector4 clearColour, Lighting lighting)
+    private void RenderEnhanced(ref SDL_GPUCommandBuffer* commands, View view, Vector4 clearColour, Lighting lighting)
     {
         EnsureEnhanced();
         if (lighting.Shadows == Shadows.On)
         {
             _sunMatrix = SunShadow.Matrix(lighting.SunDirection, view.Position, lighting.ShadowDistance, ShadowSize);
-            RenderDepth(commands, _shadowMap, _sunMatrix.Value, Output.Shadow);
+            RenderDepth(ref commands, _shadowMap, _sunMatrix.Value, Output.Shadow);
         }
 
-        RenderDepth(commands, _viewDepth, view.ViewProjection, Output.Depth);
+        RenderDepth(ref commands, _viewDepth, view.ViewProjection, Output.Depth);
 
         // The scene without the canvas, into the scene texture.
         var colourTarget = SceneColour(_scene, clearColour);
         var depthTarget = SceneDepth();
-        var pass = SDL_BeginGPURenderPass(commands, &colourTarget, 1, &depthTarget);
+        var pass = BeginPass(commands, &colourTarget, &depthTarget);
         _passSamples = _samples;
         if (Panorama != null && Backdrop == Backdrop.Sky)
         {
@@ -349,7 +350,7 @@ public sealed unsafe partial class Renderer
         {
             if (order != Pass.Overlay)
             {
-                DrawPass(commands, pass, _commands, order, view);
+                DrawPass(ref commands, ref pass, _commands, order, view);
             }
         }
 
@@ -360,18 +361,18 @@ public sealed unsafe partial class Renderer
         RenderPost(commands, view, lighting);
         if (_insets.Count == 0)
         {
-            RenderCanvas(commands);
+            RenderCanvas(ref commands);
         }
         else
         {
-            RenderInsets(commands);
+            RenderInsets(ref commands);
         }
 
         _sunMatrix = null;
     }
 
     /// <summary>A depth pass: the sun's (the shadow casters) or the camera's (the opaque triangles).</summary>
-    private void RenderDepth(SDL_GPUCommandBuffer* commands, SDL_GPUTexture* target, Matrix4x4 viewProjection, Output output)
+    private void RenderDepth(ref SDL_GPUCommandBuffer* commands, SDL_GPUTexture* target, Matrix4x4 viewProjection, Output output)
     {
         var depthTarget = new SDL_GPUDepthStencilTargetInfo
         {
@@ -382,11 +383,12 @@ public sealed unsafe partial class Renderer
             stencil_load_op = SDL_GPULoadOp.SDL_GPU_LOADOP_DONT_CARE,
             stencil_store_op = SDL_GPUStoreOp.SDL_GPU_STOREOP_DONT_CARE,
         };
-        var pass = SDL_BeginGPURenderPass(commands, null, 0, &depthTarget);
+        var pass = BeginPass(commands, null, &depthTarget);
         foreach (ref readonly var command in CollectionsMarshal.AsSpan(_commands))
         {
             if (output == Output.Shadow ? CastsShadow(command) : Opaque(command))
             {
+                Reserve(ref commands, ref pass);
                 DrawDepth(commands, pass, command, viewProjection, output);
             }
         }

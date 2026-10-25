@@ -850,21 +850,21 @@ public sealed unsafe partial class Renderer : IDisposable
         QueueStream();
         UploadDynamic(commands);
         PrepareColours(commands);
-        (_drawCalls, _triangles) = (0, 0);
+        (_drawCalls, _triangles, _samplersBound) = (0, 0, 0);
         PushLights(commands, view);
         _eyeSide = 0f;
         if (StereoMode != Stereo.Off && _eyes[0] != null)
         {
             // Each eye's whole frame, then the two into the frame (side by side or interlaced).
-            RenderEye(commands, view, clearColour, 0, -1f);
-            RenderEye(commands, view, clearColour, 1, +1f);
+            RenderEye(ref commands, view, clearColour, 0, -1f);
+            RenderEye(ref commands, view, clearColour, 1, +1f);
             CompositeStereo(commands);
             _frame = _target;
         }
         else
         {
             _frame = _target;
-            RenderScene(commands, view, clearColour);
+            RenderScene(ref commands, view, clearColour);
         }
 
         ApplyGamma(commands);
@@ -1017,17 +1017,17 @@ public sealed unsafe partial class Renderer : IDisposable
     /// <summary>The cameras' and the canvas' aspect: the frame's, or an eye's half in full side by side.</summary>
     public float AspectRatio => StereoModes.EyeAspect(StereoMode, _targetHeight == 0 ? 4f / 3f : (float)_targetWidth / _targetHeight);
 
-    private void RenderScene(SDL_GPUCommandBuffer* commands, View view, Vector4 clearColour)
+    private void RenderScene(ref SDL_GPUCommandBuffer* commands, View view, Vector4 clearColour)
     {
         if (Lighting is { } lighting)
         {
-            RenderEnhanced(commands, view, clearColour, lighting);
+            RenderEnhanced(ref commands, view, clearColour, lighting);
             return;
         }
 
         var colourTarget = SceneColour(_frame, clearColour);
         var depthTarget = SceneDepth();
-        var pass = SDL_BeginGPURenderPass(commands, &colourTarget, 1, &depthTarget);
+        var pass = BeginPass(commands, &colourTarget, &depthTarget);
         _passSamples = _samples;
         if (Panorama != null && Backdrop == Backdrop.Sky)
         {
@@ -1040,7 +1040,7 @@ public sealed unsafe partial class Renderer : IDisposable
         {
             if (order != Pass.Overlay || canvasNow)
             {
-                DrawPass(commands, pass, _commands, order, view);
+                DrawPass(ref commands, ref pass, _commands, order, view);
             }
         }
 
@@ -1048,7 +1048,7 @@ public sealed unsafe partial class Renderer : IDisposable
         _passSamples = 1;
         if (!canvasNow)
         {
-            RenderInsets(commands);
+            RenderInsets(ref commands);
         }
     }
 
@@ -1087,12 +1087,13 @@ public sealed unsafe partial class Renderer : IDisposable
     }
 
     /// <summary>Draws the commands of one pass, in their order.</summary>
-    private void DrawPass(SDL_GPUCommandBuffer* commands, SDL_GPURenderPass* pass, List<DrawCommand> source, Pass order, View view)
+    private void DrawPass(ref SDL_GPUCommandBuffer* commands, ref SDL_GPURenderPass* pass, List<DrawCommand> source, Pass order, View view)
     {
         foreach (ref readonly var command in CollectionsMarshal.AsSpan(source))
         {
             if (command.Material.Pass == order)
             {
+                Reserve(ref commands, ref pass);
                 DrawOne(commands, pass, command, view);
             }
         }
