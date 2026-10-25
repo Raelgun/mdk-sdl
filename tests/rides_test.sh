@@ -59,6 +59,10 @@ OUT=$(run --level=6 --delay=0.5 --teleport=OLYM_4,-1732,92,-1260 --fire --wait=6
 echo "$OUT" | grep "XBGUN_.* flags 8" | tail -1
 echo "$OUT" | grep -q "XBGUN_.* COLYM_4 .* path 35601"; check "the cannon flies Kurt" $?
 
+OUT=$(run --level=4 --delay=0.5 --teleport=MEAT_7,0,14780,30 --walk=4 --jump --wait=4.5)
+echo "$OUT" | grep "^Kurt at"
+awk "BEGIN { exit !($(kurt "$OUT" 2) < 14822) }"; check "the door stops a jump" $?
+
 [ $FAILED = 0 ] && echo PASSED && exit 0
 echo FAILED
 exit 1
