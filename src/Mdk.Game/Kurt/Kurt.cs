@@ -441,6 +441,7 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
 
         UpdateUpdraft(delta);
         Fall(delta);
+        _blown = false;
     }
 
     /// <summary>In the air: the jump's hold time runs out; held jump opens the chute when falling
@@ -452,12 +453,13 @@ public sealed partial class Kurt(ArenaSpace space, SoundMixer mixer, Func<Kurt.S
             _jumpTicksLeft = Math.Max(0, _jumpTicksLeft - (int)MathF.Ceiling(delta * Ticks));
         }
 
-        if (!ChuteOpen && jumpHeld && (VerticalSpeed < FallStartSpeed || _pastJumpTop))
+        // The wind keeps the chute shut.
+        if (!ChuteOpen && jumpHeld && !_blown && (VerticalSpeed < FallStartSpeed || _pastJumpTop))
         {
             ChuteOpen = true;
             mixer.Play("CHUTEOUT");
         }
-        else if (ChuteOpen && !jumpHeld && !InUpdraft)
+        else if (ChuteOpen && (_blown || (!jumpHeld && !InUpdraft)))
         {
             ChuteOpen = false;
         }
