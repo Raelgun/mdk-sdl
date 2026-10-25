@@ -8,6 +8,8 @@
 # - LEVEL7's XE: the comm device calls it, Kurt drops onto it, the view sinks into it, the script
 #   unlocks the controls and Kurt drops a bomb. Godot: "bomber view 0.0, locked false, bombs 9",
 #   XBN_BOMB at (121, 2394, -53).
+# - LEVEL6's cannon (XBGUN) of OLYM_4: Kurt lands on it and fires; it fires twice and flies him
+#   through the glass into COLYM_4 (if_player_on_me_low 0x458a59).
 # Run from the project folder after `dotnet build`: sh tests/rides_test.sh
 # No window: the game draws off screen and never takes the focus.
 export MDK_HIDDEN=1
@@ -52,6 +54,10 @@ echo "$OUT" | grep "XBN_BOMB" | head -1
 echo "$OUT" | grep -q "^riding XE"; check "rides the XE" $?
 echo "$OUT" | grep -q "^bomber view 0.0, locked false, bombs 9"; check "view in the XE, a bomb dropped" $?
 echo "$OUT" | grep -q "XBN_BOMB.* DANT_5"; check "the bomb falls" $?
+
+OUT=$(run --level=6 --delay=0.5 --teleport=OLYM_4,-1732,92,-1260 --fire --wait=6)
+echo "$OUT" | grep "XBGUN_.* flags 8" | tail -1
+echo "$OUT" | grep -q "XBGUN_.* COLYM_4 .* path 35601"; check "the cannon flies Kurt" $?
 
 [ $FAILED = 0 ] && echo PASSED && exit 0
 echo FAILED
