@@ -459,6 +459,14 @@ public sealed unsafe partial class Renderer : IDisposable
         return device;
     }
 
+    /// <summary>SDL's GPU validation (the D3D12 debug layer, Vulkan's validation layers, where
+    /// installed): on by default in SDL, kept to Debug builds (its cost, its debug breaks).</summary>
+#if DEBUG
+    private const bool GpuValidation = true;
+#else
+    private const bool GpuValidation = false;
+#endif
+
     /// <summary>A device of an SDL driver (null: SDL's choice) taking a shader format, or null. It asks
     /// for neither depth clamping nor clip distances: no pipeline uses them, and some GPUs (Mali-G52)
     /// lack them, which would leave them no device at all.</summary>
@@ -485,6 +493,7 @@ public sealed unsafe partial class Renderer : IDisposable
 
         SDL_SetBooleanProperty(properties, SDL_PROP_GPU_DEVICE_CREATE_FEATURE_DEPTH_CLAMPING_BOOLEAN, false);
         SDL_SetBooleanProperty(properties, SDL_PROP_GPU_DEVICE_CREATE_FEATURE_CLIP_DISTANCE_BOOLEAN, false);
+        SDL_SetBooleanProperty(properties, SDL_PROP_GPU_DEVICE_CREATE_DEBUGMODE_BOOLEAN, GpuValidation);
         var device = SDL_CreateGPUDeviceWithProperties(properties);
         SDL_DestroyProperties(properties);
         return device;
