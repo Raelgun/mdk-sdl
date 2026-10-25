@@ -450,13 +450,31 @@ public sealed unsafe partial class Renderer : IDisposable
             return null;
         }
 
+        var device = CreateWith(GpuBackends.Driver(backend), format.Format);
+        if (device == null)
+        {
+            Console.Error.WriteLine($"GPU backend {name} failed ({SDL_GetError()}), using SDL's choice");
+        }
+
+        return device;
+    }
+
+    /// <summary>A device of an SDL driver (null: SDL's choice) taking a shader format, or null. It asks
+    /// for neither depth clamping nor clip distances: no pipeline uses them, and some GPUs (Mali-G52)
+    /// lack them, which would leave them no device at all.</summary>
+    private static SDL_GPUDevice* CreateWith(string? driver, SDL_GPUShaderFormat format)
+    {
         var properties = SDL_CreateProperties();
-        SDL_SetStringProperty(properties, SDL_PROP_GPU_DEVICE_CREATE_NAME_STRING, GpuBackends.Driver(backend));
-        if (format.Format == SDL_GPUShaderFormat.SDL_GPU_SHADERFORMAT_DXIL)
+        if (driver != null)
+        {
+            SDL_SetStringProperty(properties, SDL_PROP_GPU_DEVICE_CREATE_NAME_STRING, driver);
+        }
+
+        if (format == SDL_GPUShaderFormat.SDL_GPU_SHADERFORMAT_DXIL)
         {
             SDL_SetBooleanProperty(properties, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_DXIL_BOOLEAN, true);
         }
-        else if (format.Format == SDL_GPUShaderFormat.SDL_GPU_SHADERFORMAT_MSL)
+        else if (format == SDL_GPUShaderFormat.SDL_GPU_SHADERFORMAT_MSL)
         {
             SDL_SetBooleanProperty(properties, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_MSL_BOOLEAN, true);
         }
@@ -465,13 +483,10 @@ public sealed unsafe partial class Renderer : IDisposable
             SDL_SetBooleanProperty(properties, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_SPIRV_BOOLEAN, true);
         }
 
+        SDL_SetBooleanProperty(properties, SDL_PROP_GPU_DEVICE_CREATE_FEATURE_DEPTH_CLAMPING_BOOLEAN, false);
+        SDL_SetBooleanProperty(properties, SDL_PROP_GPU_DEVICE_CREATE_FEATURE_CLIP_DISTANCE_BOOLEAN, false);
         var device = SDL_CreateGPUDeviceWithProperties(properties);
         SDL_DestroyProperties(properties);
-        if (device == null)
-        {
-            Console.Error.WriteLine($"GPU backend {name} failed ({SDL_GetError()}), using SDL's choice");
-        }
-
         return device;
     }
 
@@ -501,7 +516,7 @@ public sealed unsafe partial class Renderer : IDisposable
                 continue;
             }
 
-            var device = SDL_CreateGPUDevice(candidate.Format, false, (byte*)null);
+            var device = CreateWith(null, candidate.Format);
             if (device == null)
             {
                 continue;
@@ -618,6 +633,8 @@ public sealed unsafe partial class Renderer : IDisposable
                 cull_mode = pass == Pass.Solid && geometry == Geometry.Mesh && output != Output.Shadow ? SDL_GPUCullMode.SDL_GPU_CULLMODE_BACK : SDL_GPUCullMode.SDL_GPU_CULLMODE_NONE,
                 // MDK's front faces wind clockwise on screen.
                 front_face = SDL_GPUFrontFace.SDL_GPU_FRONTFACE_CLOCKWISE,
+                // Clips at the near and far planes: the device has no depth clamping (CreateWith).
+                enable_depth_clip = true,
                 enable_depth_bias = output == Output.Shadow,
                 depth_bias_slope_factor = output == Output.Shadow ? ShadowSlopeBias : 0f,
             },
