@@ -10,7 +10,7 @@ using Mdk.Game.Menu;
 namespace Mdk.Game.Fall;
 
 /// <summary>The fall before a level (fall.gd) as a screen of the game: the keys steer Kurt, Esc
-/// skips it (the port's addition). It ends with the level, which keeps Kurt's health and pickups
+/// opens the pause menu as in a level (0x403cf8). It ends with the level, which keeps Kurt's health and pickups
 /// (<see cref="GameState.Carry"/>), or, when he dies, with the main menu.
 /// <code>
 ///   input ──► FallSim ──► FallView (3D), FallHud, palette effects ──► frame
@@ -32,6 +32,7 @@ public sealed class FallScreen : IScreen
     private readonly FallSim _sim;
     private readonly FallView _view;
     private readonly SoundBank _sounds;
+    private readonly PauseMenu _pause;
     private readonly List<int> _voices = [];
     private readonly int _windVoice;
     private int _grindVoice;
@@ -55,6 +56,7 @@ public sealed class FallScreen : IScreen
         var mti = TextureArchive.Load(data.PathOf($"FALL3D/FALL3D_{n}.MTI"));
         _view = new FallView(ui.Renderer, bni, mti, index, ui.Fti, ui.CanvasMods(state.Level));
         _sounds = new SoundBank([Sni.Load(data.PathOf("FALL3D/FALL3D.SNI"))]);
+        _pause = new PauseMenu(ui);
 
         var models = _view.Models;
         FallSim.Animation Animation(string name)
@@ -78,9 +80,18 @@ public sealed class FallScreen : IScreen
     public Event Frame(float elapsed, string? screenshot)
     {
         var input = _ui.Input;
+
+        // The pause menu: the fall waits under it.
+        if (_pause.Open)
+        {
+            return Paused(elapsed, screenshot);
+        }
+
         if (input.WasPressed(MenuKey.Back))
         {
-            _sim.Skip();
+            _pause.Show();
+            _ui.Window.CaptureMouse(Capture.Off);
+            return Event.None;
         }
 
         HoldTestKeys(input);
@@ -103,6 +114,26 @@ public sealed class FallScreen : IScreen
         _view.DrawEffects(_sim);
         _ui.Renderer.Present(view, _view.Backdrop, screenshot);
         return Next();
+    }
+
+    /// <summary>A frame under the pause menu: the fall drawn as it stopped, the menu over it.</summary>
+    private Event Paused(float elapsed, string? screenshot)
+    {
+        var view = _view.Draw(_sim);
+        if (!_sim.InIntro)
+        {
+            _view.Hud.Draw(_sim.Health, _sim.Inventory, _sim.Dying ? FallHud.Life.Dying : FallHud.Life.Alive, _sim.Red);
+        }
+
+        _view.DrawEffects(_sim);
+        var next = _pause.Update(elapsed);
+        _ui.Renderer.Present(view, _view.Backdrop, screenshot);
+        if (!_pause.Open && _ui.Window.Visibility == Visibility.Shown)
+        {
+            _ui.Window.CaptureMouse(Capture.On);
+        }
+
+        return next;
     }
 
     /// <summary>The fall's time, Kurt's height above the ground, his health and pickups.</summary>

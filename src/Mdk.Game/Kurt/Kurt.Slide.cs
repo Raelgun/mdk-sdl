@@ -66,6 +66,8 @@ public sealed partial class Kurt
     private float _slideAir;
     /// <summary>Ticks left after an arena change (0x573be8 below 0); 0: none.</summary>
     private float _slideLeft;
+    /// <summary>A wind zone blew on him since his last step (0x573bec).</summary>
+    private bool _blown;
     private int _slideVoice;
     private string _slideSound = "";
 
@@ -102,6 +104,15 @@ public sealed partial class Kurt
         }
 
         _slideLeft = SlideArenaTicks;
+    }
+
+    /// <summary>In a wind zone's box in the air (opcode 224 sets 0x573bec): the wind pulls him down
+    /// and keeps his chute shut for the next step (damp_vertical 0x4694bc), so he lands in the box
+    /// and slides instead of gliding past it.</summary>
+    public void Blow(float dt)
+    {
+        _blown = true;
+        VerticalSpeed -= SlideGravity * dt;
     }
 
     public void StopSlide()

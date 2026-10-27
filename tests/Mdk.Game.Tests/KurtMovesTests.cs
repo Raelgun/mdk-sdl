@@ -168,6 +168,43 @@ public class KurtMovesTests
         Assert.Equal(-185f - 56f / 101f * (f.Y + 599f), f.Z, 3f);
     }
 
+    /// <summary>Level 6's COLYM_3 wind zone (wind_zone [1, 180, 10]), at the top of the spiral under
+    /// OLYM_3's hatch.</summary>
+    private static readonly Vector3 HatchWindMin = new(-1738f, 179f, -745f);
+    private static readonly Vector3 HatchWindMax = new(-1656f, 246f, -680f);
+    private const float HatchWindYaw = 180f;
+
+    /// <summary>Issue #20: dropping through the hatch with the chute open, Kurt glided past the wind
+    /// box and walked down the spiral. In the box the wind keeps the chute shut (0x573bec, damp_vertical
+    /// 0x4694bc): he lands in it and slides.</summary>
+    [DataFact]
+    public void TheWindShutsTheChute()
+    {
+        var kurt = KurtIn(SpaceOf(6, "COLYM_3"), new Vector3(-1662f, 212f, -684f), HatchWindYaw);
+        var input = Holding(Key.Jump, Key.Forward);
+        for (var t = 0f; t < 3f; t += Step)
+        {
+            // The script's tick (30 a second), as ScriptRuntime.WindZone.
+            var p = kurt.Feet;
+            var inBox = p.X >= HatchWindMin.X && p.Y >= HatchWindMin.Y && p.Z >= HatchWindMin.Z && p.X <= HatchWindMax.X
+                && p.Y <= HatchWindMax.Y && p.Z <= HatchWindMax.Z;
+            if ((int)(t / Step) % 2 == 0 && inBox && (kurt.Sliding || kurt.OnFloor))
+            {
+                kurt.StartSlide();
+                kurt.Yaw = HatchWindYaw;
+                kurt.SlideAccel(new Vector2(-WindSpeed, 0f), Tick);
+            }
+            else if ((int)(t / Step) % 2 == 0 && inBox)
+            {
+                kurt.Blow(Tick);
+            }
+
+            kurt.Update(input, Step);
+        }
+
+        Assert.True(kurt.Sliding, $"not sliding at {kurt.Feet}, {kurt.Current}");
+    }
+
     [DataFact]
     public void ForwardSpeedsTheSlideUpAndBackBrakesIt()
     {

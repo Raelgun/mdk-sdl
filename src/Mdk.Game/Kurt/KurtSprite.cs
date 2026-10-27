@@ -71,7 +71,8 @@ public sealed class KurtSprite
         [Kurt.State.Slip] = ("K_SLIP", Repeat.Once),
         [Kurt.State.Slide] = ("K_SLIDE", Repeat.Loop),
         [Kurt.State.SlideFast] = ("K_FSLIDE", Repeat.Loop),
-        [Kurt.State.SlideBrake] = ("K_BSLIDE", Repeat.Loop),
+        // Braking holds K_BSLIDE's last frame (0x4646a4, state 0x32a).
+        [Kurt.State.SlideBrake] = ("K_BSLIDE", Repeat.Once),
         [Kurt.State.Hang] = ("K_HANG", Repeat.Once),
         [Kurt.State.HardLand] = ("K_CRASHL", Repeat.Once),
         [Kurt.State.RollLeft] = ("K_ROLLL", Repeat.Once),

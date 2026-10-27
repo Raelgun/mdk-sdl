@@ -134,9 +134,11 @@ public static class Solids
 
             var t0 = (box.Min[i] - a[i]) / step;
             var t1 = (box.Max[i] - a[i]) / step;
-            if (MathF.Min(t0, t1) > enter)
+            // On the face (t = 0) counts as outside: entered at once (0x45f588: A ≤ min).
+            var near = MathF.Min(t0, t1);
+            if (near > enter || (near == enter && axis < 0))
             {
-                enter = MathF.Min(t0, t1);
+                enter = near;
                 axis = i;
             }
 

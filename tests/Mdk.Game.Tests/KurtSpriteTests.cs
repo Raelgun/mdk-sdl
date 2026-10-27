@@ -78,6 +78,19 @@ public class KurtSpriteTests
         Assert.Equal(mirror, KurtSprite.Mirror(kurt));
     }
 
+    /// <summary>Issue #20: braking, Kurt flickered. damp_animate (0x4646a4, state 0x32a) plays
+    /// K_BSLIDE's 3 frames once and holds the last; the port looped them 10 times a second.</summary>
+    [Fact]
+    public void TheBrakeHoldsItsLastFrame()
+    {
+        var animations = (System.Collections.IDictionary)typeof(KurtSprite)
+            .GetField("Animations", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.GetValue(null)!;
+        var brake = (System.Runtime.CompilerServices.ITuple)animations[Kurt.Kurt.State.SlideBrake]!;
+
+        Assert.Equal("K_BSLIDE", brake[0]);
+        Assert.Equal("Once", brake[1]!.ToString());
+    }
+
     [Fact]
     public void CloseUpStaysInFront() => Assert.InRange(KurtSprite.Nearer(1f, null), 0.1f, 1f);
 

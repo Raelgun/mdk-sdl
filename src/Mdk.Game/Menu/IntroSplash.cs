@@ -40,7 +40,14 @@ public sealed class IntroSplash
             return;
         }
 
+        // Some copies' entry is too short for the two palettes (#22): no splash, as without one.
         var bytes = Ui.BytesOf(options, Entry);
+        if (bytes.Length < PaletteSize * 2)
+        {
+            Done = true;
+            return;
+        }
+
         _palettes = [new byte[PaletteSize], bytes[..PaletteSize], bytes[PaletteSize..(PaletteSize * 2)]];
         _image = new PalettedImage(ui.Renderer, Width, Height, Unpack(bytes, PaletteSize * 2, Width * Height), _palettes[0]);
     }

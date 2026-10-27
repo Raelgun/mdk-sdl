@@ -11,7 +11,7 @@ namespace Mdk.Game.DevTools;
 ///   ┌──────────────────────────────┐ ▲
 ///   │ Level 3: 12 arenas ...       │ │ half the canvas
 ///   │ ] pos                        │ │
-///   │ ] god_                       │ ▼ × slide
+///   │ ] god_          MDK SDL 1.2.1│ ▼ × slide
 ///   └──────────────────────────────┘
 /// </code></summary>
 public sealed class ConsoleView(DevTextView text)
@@ -21,6 +21,8 @@ public sealed class ConsoleView(DevTextView text)
     private const string Cursor = "_";
     private static readonly Vector4 Background = new(0.02f, 0.03f, 0.06f, 0.85f);
     private static readonly Vector4 Edge = new(0.5f, 0.6f, 0.8f, 1f);
+    /// <summary>The version, at the bottom right as in Quake's console.</summary>
+    private static readonly string Version = "MDK SDL " + BuildInfo.Current().Version;
 
     /// <summary>The console's bottom edge on the canvas (0 when closed).</summary>
     public static float Bottom(DevConsole console) => Height * console.Slide;
@@ -48,6 +50,7 @@ public sealed class ConsoleView(DevTextView text)
         }
 
         text.Text(_prompt, Margin, baseline);
+        text.Text(Version, width - Margin - text.Width(Version), baseline);
         var rows = (int)((height - Margin) / DevTextView.LineHeight) - 1;
         log.CopyLast(rows + console.Scroll, _lines);
         var newest = Math.Max(_lines.Count - console.Scroll, 0);

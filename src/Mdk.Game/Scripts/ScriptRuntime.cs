@@ -2296,7 +2296,8 @@ public sealed partial class ScriptRuntime
 
     /// <summary>wind_zone (opcode 224, 0x4579e0): while Kurt is inside one of the arena's type-9 boxes,
     /// the wind blows him along the yaw at the speed, sliding him on his back (damp_buttslide); in
-    /// the air without sliding it only pulls him down twice as fast. Disabled, it ends the slide.</summary>
+    /// the air without sliding it only pulls him down twice as fast, his chute shut. Disabled, it ends
+    /// the slide.</summary>
     public enum Wind { Off, On }
 
     public void WindZone(string arena, Wind wind, float yaw, float speed)
@@ -2322,7 +2323,7 @@ public sealed partial class ScriptRuntime
             }
             else
             {
-                Kurt.AddVerticalSpeed(-Mdk.Game.Kurt.Kurt.SlideGravity * Tick);
+                Kurt.Blow(Tick);
             }
 
             return;

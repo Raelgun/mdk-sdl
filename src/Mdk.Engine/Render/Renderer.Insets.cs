@@ -59,27 +59,27 @@ public sealed unsafe partial class Renderer
         _open = null;
     }
 
-    private void RenderInsets(SDL_GPUCommandBuffer* commands)
+    private void RenderInsets(ref SDL_GPUCommandBuffer* commands)
     {
-        RenderInsets(commands, InsetLayer.UnderCanvas);
-        RenderCanvas(commands);
-        RenderInsets(commands, InsetLayer.OverCanvas);
+        RenderInsets(ref commands, InsetLayer.UnderCanvas);
+        RenderCanvas(ref commands);
+        RenderInsets(ref commands, InsetLayer.OverCanvas);
 
         ClearInsets();
     }
 
-    private void RenderInsets(SDL_GPUCommandBuffer* commands, InsetLayer layer)
+    private void RenderInsets(ref SDL_GPUCommandBuffer* commands, InsetLayer layer)
     {
         foreach (var inset in _insets)
         {
             if (inset.Layer == layer)
             {
-                RenderInset(commands, inset);
+                RenderInset(ref commands, inset);
             }
         }
     }
 
-    private void RenderInset(SDL_GPUCommandBuffer* commands, Inset inset)
+    private void RenderInset(ref SDL_GPUCommandBuffer* commands, Inset inset)
     {
         var pass = BeginOver(commands);
         var scale = _targetHeight / CanvasHeight;
@@ -99,8 +99,7 @@ public sealed unsafe partial class Renderer
             w = (int)MathF.Ceiling(viewport.w),
             h = (int)MathF.Ceiling(viewport.h),
         };
-        SDL_SetGPUViewport(pass, &viewport);
-        SDL_SetGPUScissor(pass, &scissor);
+        ClipPass(pass, viewport, scissor);
 
         var scene = inset.Content == InsetContent.Scene;
         var view = _eyeSide == 0f ? inset.View : inset.View.Eye(_eyeSide, StereoSeparation, StereoConvergence);
@@ -114,17 +113,17 @@ public sealed unsafe partial class Renderer
         {
             if (order != Pass.Overlay)
             {
-                DrawPass(commands, pass, source, order, view);
+                DrawPass(ref commands, ref pass, source, order, view);
             }
         }
 
         SDL_EndGPURenderPass(pass);
     }
 
-    private void RenderCanvas(SDL_GPUCommandBuffer* commands)
+    private void RenderCanvas(ref SDL_GPUCommandBuffer* commands)
     {
         var pass = BeginOver(commands);
-        DrawPass(commands, pass, _commands, Pass.Overlay, default);
+        DrawPass(ref commands, ref pass, _commands, Pass.Overlay, default);
 
         SDL_EndGPURenderPass(pass);
     }
@@ -143,10 +142,10 @@ public sealed unsafe partial class Renderer
             texture = _depth,
             clear_depth = 1f,
             load_op = SDL_GPULoadOp.SDL_GPU_LOADOP_CLEAR,
-            store_op = SDL_GPUStoreOp.SDL_GPU_STOREOP_DONT_CARE,
+            store_op = DepthStore,
             stencil_load_op = SDL_GPULoadOp.SDL_GPU_LOADOP_DONT_CARE,
             stencil_store_op = SDL_GPUStoreOp.SDL_GPU_STOREOP_DONT_CARE,
         };
-        return SDL_BeginGPURenderPass(commands, &colourTarget, 1, &depthTarget);
+        return BeginPass(commands, &colourTarget, &depthTarget);
     }
 }
