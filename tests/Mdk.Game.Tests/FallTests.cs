@@ -96,15 +96,6 @@ public class FallTests
     }
 
     [Fact]
-    public void EscSkips()
-    {
-        var sim = NewFall();
-        Run(sim, 1f);
-        sim.Skip();
-        Assert.Equal(FallSim.Outcome.Landed, sim.State);
-    }
-
-    [Fact]
     public void SteeringToThePickupsTakesThem()
     {
         var sim = NewFall();

@@ -393,8 +393,9 @@ city needs T + 4 to reach the top of `ARENA_4`); the sniper key puts the helmet 
 
 ### Android
 
-`mdk-android.apk` (a release's or CI's artifact) runs on 64-bit Android 8+ phones with Vulkan
-(arm64; x64 for emulators). Install it by allowing installs from unknown sources. The game files
+`mdk-android.apk` (a release's or CI's artifact) runs on 64-bit Android 8+ phones with a Vulkan
+1.0+ GPU (arm64; x64 for emulators); depth clamping and clip distances, which some (Mali-G52)
+lack, aren't needed. Install it by allowing installs from unknown sources. The game files
 aren't in it: copy your MDK folder (the one with `TRAVERSE`, `MISC`, `FALL3D`, `STREAM`) to the
 phone, e.g. into `Download/MDK`. On first start the app asks for that folder (Android's folder
 picker; `Download` itself can't be picked, a folder in it can) and copies its game files (about

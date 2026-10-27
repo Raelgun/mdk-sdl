@@ -33,6 +33,17 @@ public class SolidsTests
         Assert.Equal(13f, end.Value.Y, Tolerance);
     }
 
+    /// <summary>Kurt on a face (as a BSP wall in its plane leaves him) is outside the box and stopped
+    /// at once (0x45f588: A ≤ min, t = 0), e.g. LEVEL4's X4DOOR before the board (issue #25).</summary>
+    [Fact]
+    public void WalkFromTheFaceStops()
+    {
+        var face = 10f - Half.X;
+        var end = Walk(new Vector3(face, 11f, 3f), new Vector3(face + 1f, 11f, 3f), Half, [Crate]);
+        Assert.NotNull(end);
+        Assert.True(end.Value.X <= face);
+    }
+
     [Fact]
     public void BoxesAboveOrBelowAndBoxesKurtIsInAreIgnored()
     {

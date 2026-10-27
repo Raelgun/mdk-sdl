@@ -71,6 +71,14 @@ echo "$OUT" | grep -qx "Level starts with the fall's health $HEALTH and pickups 
 echo "$PICKUPS" | grep -qx "\(\(SW_HOME\|SW_GATT\),\?\)*"; check "pickups of FALLPU_1" $?
 echo "$OUT" | grep -q "^Level 7:"; check "level 7 follows" $?
 
+# Esc opens the pause menu, as in a level (the original's abortcon.c, 0x403cf8); the fall waits
+# under it for 2 s and goes on after Esc again (#24). The intro takes 5 s.
+OUT=$(run --fall=7 --profile --press=Menu.Back@7,Menu.Back@9 --wait=12)
+echo "$OUT" | grep -qx "Menu: Resume | Options | Main menu | Quit"; check "Esc: pause menu" $?
+! echo "$OUT" | grep -q "^Fall ended"; check "Esc: no skip" $?
+LAST=$(echo "$OUT" | sed -n 's/^Fall t \([0-9]*\)\.0 .*/\1/p' | tail -n 1)
+[ "$LAST" -le 5 ]; check "fall waits under the menu (last t $LAST)" $?
+
 rm -rf "$MDK_USER_DIR"
 [ $FAILED = 0 ] && echo PASSED && exit 0
 echo FAILED

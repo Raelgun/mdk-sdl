@@ -162,11 +162,11 @@ public sealed unsafe partial class Renderer
     }
 
     /// <summary>Draws one eye's whole frame through its view into its target.</summary>
-    private void RenderEye(SDL_GPUCommandBuffer* commands, View view, Vector4 clearColour, int eye, float side)
+    private void RenderEye(ref SDL_GPUCommandBuffer* commands, View view, Vector4 clearColour, int eye, float side)
     {
         _frame = _eyes[eye];
         _eyeSide = side;
-        RenderScene(commands, view.Eye(side, StereoSeparation, StereoConvergence), clearColour);
+        RenderScene(ref commands, view.Eye(side, StereoSeparation, StereoConvergence), clearColour);
     }
 
     /// <summary>The two eyes into the frame: side by side or top and bottom (an eye a half;

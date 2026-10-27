@@ -1266,11 +1266,10 @@ public sealed class ScriptVm(ScriptRuntime runtime, ScriptDecoder decoder)
             case 221: // pick_waypoint8
                 runtime.PickWaypoint8(obj, I(o[0]));
                 return Branch(obj, ins, obj.MoveCommand == 221);
-            case 209: // if_player_on_me_low: Kurt stands on it, fires, and isn't above its top
-            {
-                var onMe = runtime.GetKurtPlatform() == obj && runtime.Kurt.Firing;
-                return Branch(obj, ins, onMe && runtime.KurtPosition.Z <= runtime.GetWorldBounds(obj).Max.Z);
-            }
+            case 209: // if_player_on_me_low: Kurt stands on it and fires
+                // 0x458a59: his feet not above his floor on it (0x573a1c), which standing on it
+                // already means; its model's top can be below them (LEVEL6's XBGUN: by 0.02).
+                return Branch(obj, ins, runtime.GetKurtPlatform() == obj && runtime.Kurt.Firing);
             case 164: // path_speed_by_kurt: [enable, [distance, far, middle, near speeds]]
                 if (I(o[0]) != 0)
                 {

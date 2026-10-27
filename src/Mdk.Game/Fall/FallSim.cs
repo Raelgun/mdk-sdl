@@ -202,15 +202,6 @@ public sealed partial class FallSim
         UpdateFall(dt, ticks, steer);
     }
 
-    /// <summary>Esc skips the fall (the port's addition).</summary>
-    public void Skip()
-    {
-        if (State == Outcome.Running && !Dying)
-        {
-            State = Outcome.Landed;
-        }
-    }
-
     // --- The intro in space (0x41106c) ---
 
     private void UpdateIntro(int ticks)
