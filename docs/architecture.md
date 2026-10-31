@@ -42,7 +42,8 @@ Each layer talks only to the one below it.
 - Display (`Platform/Display.cs`, `Window.Apply`): windowed at a size, fullscreen on the desktop,
   or exclusive (`SDL_SetWindowFullscreenMode` with the display's mode of that size at its highest
   refresh); applied on a change only, never to a hidden window (tests: always 1280 x 960).
-  The renderer draws at the render scale of the swapchain's size and blits (linear when scaled);
+  The renderer draws at the render scale of the swapchain's size and blits (linear when scaled;
+  Auto, Android's default: about 1080p's pixels, 50-100 %, `Renderer.AutoPercent`);
   VSync is the swapchain's present mode (VSYNC, IMMEDIATE, MAILBOX; falls back to one the window
   supports); the frame limiter sleeps with `SDL_DelayPrecise`.
 - `Mdk.Formats` finds the game: `MDK_DATA_DIR`, `mdk` in `mdk_paths.cfg` next to the program
@@ -80,20 +81,53 @@ projects are built without a runtime identifier for it (`GlobalPropertiesToRemov
 Vulkan with the SPIR-V shaders.
 
 ```
- first start ─► MdkData.Imported? ─no─► dialog ─► ACTION_OPEN_DOCUMENT_TREE ─► DocumentTree (IDataTree)
-                       │                                                         │ MdkData.FindIn
-                       │yes                       app files/mdk ◄─MdkData.Import─┘ (TRAVERSE, FALL3D, STREAM, MISC + stamp)
-                       ▼
-              Game (MDK_USER_DIR = app files: settings, saves)
+ start ─► StorageChoice.Plan ─InPlace─► Game (data and MDK_USER_DIR = the chosen folder)
+   │  (app files/data-folder.txt,
+   │   AllFilesAccess, MdkData.Imported)
+   ├─Lost─► "can't read it" ─► forget ─► plan again
+   ├─Copied─► Game (data: app files/mdk; MDK_USER_DIR = app files)
+   ├─AskAccess─► dialog ─allow─► All files access ─► ACTION_OPEN_DOCUMENT_TREE ─► TreePaths.Resolve
+   │                │declined, refused, backed out       MdkData.At, writable ─► data-folder.txt ─► InPlace
+   │                ▼
+   └─CopyFlow─► ACTION_OPEN_DOCUMENT_TREE ─► DocumentTree (IDataTree) ─MdkData.FindIn
+                     app files/mdk ◄─MdkData.Import─┘ (TRAVERSE, FALL3D, STREAM, MISC + stamp) ─► Copied
 ```
 
-- Shared storage has no paths the game could open, so the picked folder is read through content
-  URIs and copied once; `.imported` is written last (an interrupted copy starts over).
+- In place (the default APK): with All files access (`MANAGE_EXTERNAL_STORAGE`, Android 11 on;
+  the storage permission and `requestLegacyExternalStorage` before) the picked folder's tree URI
+  becomes a path (`TreePaths`: `primary:MDK` ─► `/storage/emulated/0/MDK`, SD cards, raw
+  Downloads; clouds have none) and the game reads it as on a PC, its settings, saves, mods and
+  `mdk.log` there. `app files/data-folder.txt` remembers it; each start checks the access, the
+  game files and that the folder can be written, else says so, forgets it and plans again (the
+  copy if there is one, else asks again).
+- Copied (declined, a store build, an install from before): shared storage is read through
+  content URIs and copied once; `.imported` is written last (an interrupted copy starts over).
+  An earlier copy keeps being played. Options, "Import from folder" copies again, or switches to
+  a folder in place from the next start (settings and saves copied there, files there kept).
+- Store build: `-p:StoreBuild=true` defines `STORE_BUILD`: no storage permissions in the manifest,
+  `AllFilesAccess` says `Unavailable`, the files are always copied.
+- Setup dialogs (`Dialogs`): platform Material alerts (`Theme.Material.Dialog.Alert`, no
+  AndroidX) in the icon's teal and orange (`Resources/values/styles.xml`), titled; the copy shows
+  a progress bar. `Backdrop`, a view over SDL's still black surface, draws a starry sky, the icon
+  and the name on the left and moves the dialogs right, undimmed; it's removed before the game
+  starts. In game (Options, "Import from folder") they stay centred over the game, dimmed.
 - `Window` on Android: landscape, full screen, back button trapped (Esc; the manifest turns
   predictive back off), no text input (it would open the keyboard). While the mouse is captured
   (play), fingers drive `TouchControls` (`Input.Touch`: keys of their own, which tests' holds
   don't release) and SDL's mouse events made of touches are dropped; otherwise touches are clicks.
   `TouchView` (Game) draws the controls in the renderer's overlay.
+- The controls' sizes are physical (`ScreenDensity`: SDL's display scale over Android's 160 dpi
+  → window units per mm): 11 mm buttons, 3 mm apart, at most the 15 % of the height a phone has;
+  inside the window's safe area. `TouchView` stretches rounded masks (9 parts: corners kept),
+  a see-through fill (brighter while held), a thin outline, the label scaled to the button.
+- `TouchLayout` (Engine) holds the defaults and the player's places (`TouchPlace`: gaps to the
+  safe area's nearer edges as parts of it, size in mm; `touch.Fire=Right,0.0113,Bottom,0.2,9.8,9.8`
+  in settings.cfg), fitted to any display (inside the safe area, buttons 7-25 mm, the stick's
+  zone at least a full push). `TouchEditor` (Game, logic; unit tested) and `TouchLayoutPage`
+  (pointer, keys, drawing) edit them from Options, Touch; `--touch-layout` opens it on the
+  desktop. A finger keeps the role it landed with: looks don't press buttons, buttons don't look.
+- The menus' rows grow on a touch screen towards 10 mm (at most × 1.4, as far as the page fits;
+  `MenuItems.RowFor`, `Enlargement`): a phone's 6.5 mm rows become 9 mm; tablets' are big enough.
 
 ## Rendering (original look)
 
@@ -110,6 +144,9 @@ Vulkan with the SPIR-V shaders.
 - Coplanar details (`Level/Layers.cs`): a triangle overlapping bigger ones of its plane is a layer
   above them; layers and outlines are drawn pulled towards the eye (`DepthPull`), the same place on
   screen, nearer in depth: no flicker, no cracks. The original draws back to front, without depth.
+- Two drawn arenas (`DepthBands`, `ArenaBand`): the camera's arena, its objects, Kurt and his board
+  take the front half of the depth range (viewport min/max depth), the other arena the back half,
+  so the camera's covers it as in the original (0x41df35). The screen passes map depth back.
 - Vertex colours (white unless given) multiply the surface, Gouraud-blended: the stream's tube.
 - Glass (`GLASS1-4`) blends after the opaque surfaces; mirrors show the panorama where the sky
   behind them would be (shifted by MIRRLOW...MIRRHIGH).
@@ -167,6 +204,12 @@ light, exposure, shadows, glow, haze in the colour below the sky panorama) and t
   samples turned in a 4 x 4 ordered pattern, into its own target (`screen.hlsli` shared).
 - `post.hlsl`: the occlusion blurred over 4 x 4 pixels of the same plane (no grain, no shade
   across edges); glow from the scene's blurred mips, screen-blended; dithered.
+- Cost (`EffectQuality`, Android's Mobile; `--quality`): Mobile draws a 1024² shadow map and the
+  occlusion at half the frame's sides (texel centres snapped to pixels), blurred over 4 x 4 of
+  its texels. Measured (RTX 4050, level 3, HD textures, frame / GPU wait ms): 2880 x 1800 Full
+  11.4 / 5.1, Mobile 7.3 / 3.2; 1814 x 1134 (Auto's 63 %) Full 4.0 / 2.0, Mobile 3.3 / 1.4. At
+  2880 x 1800 the occlusion is half the GPU's time (its samples spread over more pixels), the
+  camera's depth pass 2.5 ms, post 1, the scene 1.5, shadows 0.5, mips 0.3.
 
 ## HD textures
 
@@ -191,6 +234,9 @@ the game decides what and how.
 
 - The key hashes the size, frames, indices and the colours of the used indices: arenas whose
   palettes differ elsewhere share an image; changed game files find none (the original is used).
+- A level's `ModImages` forgets its decoded files once the level is made (`Trim`), and after its
+  first frame one compacting collection frees them (`Viewer.Settle`): level 3 with HD textures,
+  GC heap 331 ─► 127 MB, live 315 ─► 100 MB. The menus' images stay decoded (screens remake them).
 - `Renderer.Replace` keeps the image until it's on the GPU, then only its size; a texture or
   palette change (a bullet hole) drops it and expands the original again. UVs are unchanged (same
   aspect).
@@ -257,7 +303,12 @@ texture expansion, no decoding, (almost) no managed allocation, so no garbage co
 `Flow/Game.cs` runs one screen (`IScreen`) at a time; each frame returns an `Event` and the game
 picks the next screen. A screen's textures and meshes are freed when it ends (`Renderer.Mark`,
 `Renderer.Release`); the 2D screens draw the original's 600 x 360 view fitted on the canvas
-(`Menu/Ui.cs`, `ScreenView`).
+(`Menu/Ui.cs`, `ScreenView`): inside the window's safe area (`Renderer.CanvasSafeArea`: no
+cut-out or rounded corner over it), whole, with black bars; only the loading screen fills a 4:3
+canvas's height as before (its sides cut). The 3D cameras keep the 4:3 view's width on narrower
+screens (`CameraMath.KeepWidth`: Vert-, a near-square foldable sees more above and below) and
+widen on wider ones (Hor+); sniper mode's scope keeps its 2D-aligned projection
+(`tests/aspect_test.sh`).
 
 ```
  splash ─► main menu ─new game─► briefing ──fall──► loading ─► level (Viewer)

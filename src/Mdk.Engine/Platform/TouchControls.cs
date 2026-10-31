@@ -14,8 +14,10 @@ public enum InputSource { Touch, Device }
 public readonly record struct TouchButton(Key Key, string Label, RectangleF Area);
 
 /// <summary>On-screen controls of a touch screen during play (Android). Each finger is a stick, a
-/// button or a look: a finger landing on the left part walks (the stick is where it lands), on a
-/// button holds its key, elsewhere drags the view as the mouse does.
+/// button or a look: a finger landing in the stick's zone (the left part, or where the player put it;
+/// <see cref="TouchLayout"/>) walks (the stick is where it lands), on a button holds its key,
+/// elsewhere drags the view as the mouse does. A finger keeps its role: a look sliding over a
+/// button doesn't press it, a button's finger doesn't look.
 /// <code>
 ///   ┌───────────────────────────────────────────────┐
 ///   │                                         [ ||] │  pause (Esc)
@@ -25,35 +27,21 @@ public readonly record struct TouchButton(Key Key, string Label, RectangleF Area
 ///   │                                        [JUMP ] [FIRE]
 ///   │                                                (radar)
 ///   └───────────────────────────────────────────────┘
+/// Sizes are physical (millimetres of the display), at most the parts of the screen's height they
+/// were on a phone: a tablet's buttons don't grow with its pixels. The buttons keep inside the
+/// window's safe area (cut-outs, rounded corners).
 /// </code></summary>
 public sealed class TouchControls
 {
-    /// <summary>Sizes in parts of the screen's height.</summary>
-    private const float ButtonSize = 0.15f;
-    private const float Margin = 0.025f;
-    /// <summary>Room under the buttons for the HUD's radar (bottom right).</summary>
-    private const float RadarSpace = 0.2f;
+    /// <summary>The stick's reach: a part of the screen's height at most, in millimetres.</summary>
     private const float StickSize = 0.12f;
-    /// <summary>The stick's left part of the screen's width.</summary>
-    private const float StickSide = 0.4f;
+    private const float StickMm = 14f;
     /// <summary>Pushes shorter than this part of the radius don't walk.</summary>
     private const float DeadZone = 0.35f;
     /// <summary>Pushes past this part of the radius run (turbo).</summary>
     private const float RunZone = 1.5f;
     /// <summary>Mouse motion per pixel dragged.</summary>
     private const float LookScale = 0.5f;
-
-    /// <summary>The buttons by column from the right edge and row from the bottom.</summary>
-    private static readonly (Key Key, string Label, int Column, int Row)[] Buttons =
-    [
-        (Key.Fire, "FIRE", 0, 0),
-        (Key.Jump, "JUMP", 1, 0),
-        (Key.UseItem, "USE", 0, 1),
-        (Key.Sniper, "SNIPE", 1, 1),
-        (Key.ItemNext, "ITEM", 0, 2),
-        (Key.ZoomIn, "+", 1, 2),
-        (Key.ZoomOut, "-", 2, 2),
-    ];
 
     /// <summary>The stick's keys: up, down, left, right, far.</summary>
     private static readonly Key[] StickKeys = [Key.Forward, Key.Back, Key.StrafeLeft, Key.StrafeRight, Key.Turbo];
@@ -73,9 +61,26 @@ public sealed class TouchControls
 
     private readonly Dictionary<ulong, Finger> _fingers = [];
     private ulong? _stickFinger;
-    /// <summary>The last layout and its screen: drawn every frame, made again only on a resize.</summary>
+    /// <summary>The last layout and what it was made for: drawn every frame, made again only on a
+    /// resize or another display.</summary>
     private IReadOnlyList<TouchButton> _layout = [];
     private Vector2 _layoutScreen;
+    private float _layoutDensity;
+    private RectangleF _layoutSafe;
+    /// <summary>Where a finger landing starts the stick.</summary>
+    private RectangleF _zone;
+
+    /// <summary>The player's places of the controls (none: the defaults); laid out again when they change.</summary>
+    private Dictionary<TouchPart, TouchPlace> _places = [];
+    private bool _placesChanged;
+
+    /// <summary>The controls' opacity (1: as drawn by default).</summary>
+    public float Opacity { get; private set; } = 1f;
+
+    /// <summary>The display's window units per millimetre (0: unknown) and the window's safe area
+    /// (empty: all of it).</summary>
+    private float _unitsPerMm;
+    private RectangleF _safe;
 
     /// <summary>Where the stick is (window pixels), or null when no finger walks.</summary>
     public Vector2? Stick { get; private set; }
@@ -84,26 +89,72 @@ public sealed class TouchControls
     public Vector2? StickAt => _stickFinger is { } id ? _fingers[id].At : null;
 
     /// <summary>A full push of the stick (pixels).</summary>
-    public float StickRadius(Vector2 screen) => StickSize * screen.Y;
+    public float StickRadius(Vector2 screen) => StickReach(screen.Y, _unitsPerMm);
 
-    /// <summary>The buttons' areas on a screen of this size; the pause button is at the top right.</summary>
+    /// <summary>A full push of the stick on a screen of this height (pixels).</summary>
+    internal static float StickReach(float height, float unitsPerMm) => Physical(StickSize, StickMm, height, unitsPerMm);
+
+    /// <summary>The player's places (<see cref="TouchLayout"/>; missing controls keep their
+    /// defaults) and the controls' opacity.</summary>
+    internal void Arrange(IReadOnlyDictionary<TouchPart, TouchPlace> places, float opacity)
+    {
+        Opacity = opacity;
+        if (places.Count == _places.Count && places.All(p => _places.TryGetValue(p.Key, out var place) && place == p.Value))
+        {
+            return;
+        }
+
+        _places = new Dictionary<TouchPart, TouchPlace>(places);
+        _placesChanged = true;
+    }
+
+    /// <summary>The display the controls are on: its window units per millimetre (0: unknown) and
+    /// the window's safe area (empty: all of it). Set by the window every frame.</summary>
+    internal void Measure(float unitsPerMm, RectangleF safe)
+    {
+        _unitsPerMm = unitsPerMm;
+        _safe = safe;
+    }
+
+    /// <summary>A size: <paramref name="mm"/> millimetres, at most <paramref name="part"/> of the
+    /// screen's height (all of it on an unknown display).
+    /// <code>
+    ///   phone  1080 px, 16.5 px/mm: min(0.15 × 1080, 11 × 16.5) = 162 px
+    ///   tablet 1800 px, 12.6 px/mm: min(0.15 × 1800, 11 × 12.6) = 139 px
+    /// </code></summary>
+    internal static float Physical(float part, float mm, float height, float unitsPerMm) =>
+        unitsPerMm > 0f ? MathF.Min(part * height, mm * unitsPerMm) : part * height;
+
+    /// <summary>Whether a finger holds a button's key (drawn pressed).</summary>
+    public bool Held(Key key)
+    {
+        foreach (var finger in _fingers.Values)
+        {
+            if (finger.Role == Role.Button && finger.Key == key)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The buttons' areas on a screen of this size, in the order they're hit; the pause button is at the top right.</summary>
     public IReadOnlyList<TouchButton> Layout(Vector2 screen)
     {
-        if (screen == _layoutScreen)
+        if (screen == _layoutScreen && _unitsPerMm == _layoutDensity && _safe == _layoutSafe && !_placesChanged)
         {
             return _layout;
         }
 
-        var size = ButtonSize * screen.Y;
-        var margin = Margin * screen.Y;
-        var step = size + margin;
-        var buttons = Buttons
-            .Select(b => new TouchButton(b.Key, b.Label, new RectangleF(screen.X - margin - size - b.Column * step, screen.Y - RadarSpace * screen.Y - size - b.Row * step, size, size)))
+        var buttons = TouchLayout.Parts
+            .Where(TouchLayout.IsButton)
+            .Select(p => new TouchButton(TouchLayout.KeyOf(p), TouchLayout.LabelOf(p), TouchLayout.AreaOf(p, _places, screen, _safe, _unitsPerMm)))
             .ToList();
 
-        buttons.Add(new TouchButton(Key.Escape, "||", new RectangleF(screen.X - margin - size, margin, size, size)));
+        _zone = TouchLayout.AreaOf(TouchPart.Stick, _places, screen, _safe, _unitsPerMm);
         _layout = buttons;
-        _layoutScreen = screen;
+        (_layoutScreen, _layoutDensity, _layoutSafe, _placesChanged) = (screen, _unitsPerMm, _safe, false);
         return buttons;
     }
 
@@ -118,7 +169,7 @@ public sealed class TouchControls
             return;
         }
 
-        if (at.X < StickSide * screen.X && _stickFinger == null)
+        if (_zone.Contains(at.X, at.Y) && _stickFinger == null)
         {
             _fingers[id] = new Finger(Role.Stick, at);
             _stickFinger = id;

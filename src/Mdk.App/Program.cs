@@ -19,6 +19,7 @@ using Mdk.Game.Scripts;
 //   --level=N               play level 3-8 at once (no menu); 961, 963, 966: the 1996 demo's
 //   --menu                  the main menu without the splash (--splash: with it)
 //   --options, --controls, --gamepad   the menu's options, controls or gamepad page (--beta-levels: the demo's levels)
+//   --touch-layout          the touch layout editor (Options, Touch), also without a touch screen
 //   --stats=N               the screens after level N (--phase=1-4 starts at a page,
 //                           --counts=shots,hits,sniper,sniper hits,kills,enemies,heads, --towns=bits)
 //   --briefing=N            the briefing of level N
@@ -37,9 +38,11 @@ using Mdk.Game.Scripts;
 //                           intr, tab, tabr, vr (--stereo-separation=, --stereo-convergence=; tests)
 //   --bloodyes, --nobloodno gore on or off instead of the settings' (the original's -bloodyes, -nobloodno)
 //   --gamma=0.5-2           the display's gamma instead of the settings' (tests)
+//   --quality=full|mobile   the enhanced look's cost instead of the OS's (Android: mobile; tests)
 //   --gpu=d3d12|vulkan|metal the GPU backend instead of the settings' (tests; not saved)
 //   --hidden                no window, frames drawn off screen (tests; also MDK_HIDDEN=1)
 //   --size=WxH              the hidden frame's size instead of 1280x960 (tests, videos)
+//   --swapchain             a hidden window's frames through its swapchain too, as when shown (tests)
 //   --record-audio=file.wav the sound from the start as a WAV (with --mute, in step with --frames; videos)
 //   --screenshot=file.bmp   save a frame after --wait seconds of game time, print Kurt, quit (tests)
 //   --wait=seconds          game time before the screenshot
@@ -227,7 +230,8 @@ var start = options.ContainsKey("end") ? Start.EndMovie
     : options.ContainsKey("fall") ? Start.Fall
     : options.ContainsKey("level") || (screenshot != null && !options.ContainsKey("menu")) ? Start.Level
     : Start.Menu;
-var page = options.ContainsKey("controls") ? MenuPage.Controls
+var page = options.ContainsKey("touch-layout") ? MenuPage.TouchLayout
+    : options.ContainsKey("controls") ? MenuPage.Controls
     : options.ContainsKey("gamepad") ? MenuPage.Gamepad
     : options.ContainsKey("options") ? MenuPage.Options
     : options.ContainsKey("beta-levels") ? MenuPage.BetaLevels
@@ -253,11 +257,13 @@ using var game = new Game(data, new GameOptions(start, viewer)
     StereoSeparation = stereoSeparation,
     StereoConvergence = stereoConvergence,
     Gamma = options.TryGetValue("gamma", out var gammaText) ? float.Parse(gammaText, CultureInfo.InvariantCulture) : null,
+    Quality = options.TryGetValue("quality", out var qualityText) ? Enum.Parse<EffectQuality>(qualityText, ignoreCase: true) : null,
     Presses = options.TryGetValue("press", out var presses) ? TestPresses.Parse(presses) : null,
     Mods = options.TryGetValue("mod", out var mods) ? mods.Split(',', StringSplitOptions.RemoveEmptyEntries) : null,
     Gpu = options.GetValueOrDefault("gpu"),
     RecordAudio = options.GetValueOrDefault("record-audio"),
     HiddenSize = options.TryGetValue("size", out var sizeText) && Resolution.TryParse(sizeText, out var hiddenSize) ? hiddenSize : null,
+    HiddenFrames = options.ContainsKey("swapchain") ? HiddenFrames.Swapchain : HiddenFrames.Offscreen,
     Perf = options.TryGetValue("perf", out var perf) ? (perf.Length != 0 ? float.Parse(perf, CultureInfo.InvariantCulture) : DefaultWarmup) : null,
 });
 game.Run();

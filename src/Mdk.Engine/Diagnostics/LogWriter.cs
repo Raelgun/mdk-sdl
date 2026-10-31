@@ -68,6 +68,9 @@ public sealed class LogWriter(TextWriter inner, LogRing ring) : TextWriter
 /// <summary>Captures the program's output (stdout and stderr) into one ring, still printing it.</summary>
 public static class Log
 {
+    /// <summary>The lines the console keeps.</summary>
+    public const int Lines = 500;
+
     private static LogRing? _ring;
 
     /// <summary>The ring of the output's last lines; the first call installs it.</summary>
@@ -81,6 +84,15 @@ public static class Log
         _ring = new LogRing(capacity);
         Console.SetOut(new LogWriter(Console.Out, _ring));
         Console.SetError(new LogWriter(Console.Error, _ring));
+        WatchCrashes();
         return _ring;
+    }
+
+    /// <summary>Exceptions no one catches (any thread) and unobserved tasks' are logged with their
+    /// stack: a phone's only trace of a crash is mdk.log.</summary>
+    private static void WatchCrashes()
+    {
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => Console.Error.WriteLine($"Unhandled exception: {e.ExceptionObject}");
+        TaskScheduler.UnobservedTaskException += (_, e) => Console.Error.WriteLine($"Unobserved task exception: {e.Exception}");
     }
 }

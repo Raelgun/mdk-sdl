@@ -6,8 +6,10 @@ using Mdk.Engine.Audio;
 using Mdk.Engine.Platform;
 using Mdk.Engine.Render;
 using Mdk.Formats;
+using Mdk.Game.DevTools;
 using Mdk.Game.Flow;
 using Mdk.Game.HdTextures;
+using Mdk.Game.Hud;
 using Mdk.Game.Kurt;
 using Mdk.Game.Mods;
 
@@ -53,6 +55,15 @@ public sealed class MenuItems
     /// <summary>The baseline is 26 below the row's top.</summary>
     private const float Baseline = 26f / 36f;
     private const float SmallFontRow = 24f;
+    /// <summary>A touch screen's rows grow towards this height (millimetres), at most by the factor.</summary>
+    private const float TouchRowMm = 10f;
+    private const float MaxEnlargement = 1.4f;
+    /// <summary>A touch screen's long page scrolls; it shows at least this many rows.</summary>
+    private const int MinScrollRows = 8;
+    /// <summary>The scroll bar on the view's right edge (view units) and its colours.</summary>
+    private const float ScrollBarWidth = 4f;
+    private static readonly Vector4 ScrollTrack = new(1f, 1f, 1f, 0.15f);
+    private static readonly Vector4 ScrollThumb = new(1f, 1f, 1f, 0.6f);
     private const float Small = 0.65f;
     /// <summary>0.35 x 0.2 per tick.</summary>
     private const float GrowRate = 0.07f * 30f;
@@ -95,6 +106,26 @@ public sealed class MenuItems
     private HdJob? _job;
     private Entry? _jobLine;
     private Entry? _jobBack;
+    /// <summary>The touch layout editor while it's the page, and its drawing (made once).</summary>
+    private TouchLayoutPage? _touchPage;
+    private TouchView? _touchView;
+    private static readonly int[] TouchOpacities = [Settings.MinOpacity, 50, 75, Settings.MaxOpacity];
+
+    /// <summary>The rows' height as the original's (it picks the font), and the texts' scale on
+    /// it (1, larger on a touch screen's grown rows).</summary>
+    private float _originalRow;
+    private float _textScale = 1f;
+    /// <summary>A scrolling page (a touch screen's long one): its row, the first row shown, how many
+    /// show, and a drag in progress (where it started, and whether it moved: a tap presses on release).</summary>
+    private float _row;
+    private int _scrollRow;
+    private int _shownRows;
+    private bool _reveal;
+    private Vector2? _dragStart;
+    private int _dragScroll;
+    private bool _dragged;
+
+    private bool Scrolls => _shownRows > 0;
 
     public Align Alignment = Align.Centre;
     /// <summary>The row the first item stands in.</summary>
@@ -141,6 +172,7 @@ public sealed class MenuItems
         // Leaving the progress page stops the HD textures.
         _job?.Cancel();
         _job = null;
+        _touchPage = null;
         _back = null;
         Alignment = Align.Centre;
         FirstRow = 0;
@@ -148,6 +180,9 @@ public sealed class MenuItems
         _selected = -1;
         _waiting = null;
         _repeat = 0f;
+        _scrollRow = 0;
+        _reveal = true;
+        _dragStart = null;
     }
 
     public void AddItem(string text, Action press) => Add(new Entry(text, Kind.Item, press, null));
@@ -204,6 +239,7 @@ public sealed class MenuItems
             if (_entries[i].Selectable)
             {
                 _selected = i;
+                _reveal = true;
                 return;
             }
         }
@@ -239,6 +275,13 @@ public sealed class MenuItems
             return;
         }
 
+        // The touch layout editor has its own Back (it may ask first).
+        if (_touchPage != null)
+        {
+            _touchPage.Update();
+            return;
+        }
+
         if (_back != null && input.WasPressed(MenuKey.Back))
         {
             Click();
@@ -256,7 +299,12 @@ public sealed class MenuItems
             Move(1);
         }
 
-        if (input.PointerMoved || input.WasClicked(Pointer.Left) || input.WasClicked(Pointer.Right))
+        if (Scrolls && Drag(input))
+        {
+            return;
+        }
+
+        if (!Scrolls && (input.PointerMoved || input.WasClicked(Pointer.Left) || input.WasClicked(Pointer.Right)))
         {
             Hover(_ui.View.Pointer(input));
         }
@@ -267,7 +315,7 @@ public sealed class MenuItems
         }
 
         var selected = _entries[_selected];
-        var pointed = selected.Area.Contains(_ui.View.Pointer(input).X, _ui.View.Pointer(input).Y);
+        var pointed = !Scrolls && selected.Area.Contains(_ui.View.Pointer(input).X, _ui.View.Pointer(input).Y);
         if (input.WasPressed(MenuKey.Accept) || (input.WasClicked(Pointer.Left) && pointed))
         {
             Click();
@@ -321,10 +369,58 @@ public sealed class MenuItems
             }
 
             _selected = i;
+            _reveal = true;
             Click();
             return;
         }
     }
+
+    /// <summary>A scrolling page's pointer: a drag scrolls by whole rows, a tap (released where it
+    /// didn't drag) selects and presses its item. Returns whether a tap pressed one.</summary>
+    private bool Drag(Input input)
+    {
+        var point = _ui.View.Pointer(input);
+        if (input.WasClicked(Pointer.Left))
+        {
+            _dragStart = point;
+            _dragScroll = _scrollRow;
+            _dragged = false;
+            return false;
+        }
+
+        if (_dragStart is not { } start)
+        {
+            return false;
+        }
+
+        if (input.IsDown(Pointer.Left))
+        {
+            // Moved off by half a row any way, it's a drag (no press on release).
+            var rows = (int)MathF.Round((start.Y - point.Y) / _row);
+            _dragged |= Vector2.Distance(start, point) > _row / 2f;
+            _scrollRow = ClampScroll(_dragScroll + rows);
+            return false;
+        }
+
+        _dragStart = null;
+        if (_dragged)
+        {
+            return false;
+        }
+
+        var index = _entries.FindIndex(e => e.Selectable && e.Area.Contains(point.X, point.Y));
+        if (index < 0)
+        {
+            return false;
+        }
+
+        _selected = index;
+        Click();
+        _entries[index].Press?.Invoke();
+        return true;
+    }
+
+    private int ClampScroll(int row) => Math.Clamp(row, 0, Math.Max(_entries.Count - _shownRows, 0));
 
     private void Hover(Vector2 point)
     {
@@ -351,18 +447,108 @@ public sealed class MenuItems
             return;
         }
 
-        var row = RowFor(_entries.Count);
-        var font = UsesBigFont(row) ? _fonts.Big : _fonts.Small;
-        var width = _entries.Max(e => font.Width(Encoding.ASCII.GetBytes(e.Text)));
+        var enlargement = Enlargement();
+        var scrollRow = _ui.Window.HasTouchScreen ? ScrollRow(_entries.Count, FirstRow, enlargement) : 0f;
+        _originalRow = scrollRow > 0f ? Row : RowFor(_entries.Count);
+        var row = _row = scrollRow > 0f ? scrollRow : RowFor(_entries.Count, FirstRow, enlargement);
+        _shownRows = scrollRow > 0f ? ShownRows(row, FirstRow) : 0;
+        Reveal();
+        _textScale = row / _originalRow;
+        var font = UsesBigFont(_originalRow) ? _fonts.Big : _fonts.Small;
+        var width = _entries.Max(e => font.Width(Encoding.ASCII.GetBytes(e.Text))) * _textScale;
+
+        // A scrolling page's big font may be wider than the view: its texts shrink to fit beside the bar.
+        var widest = ScreenView.Size.X - ScrollBarWidth * 4f;
+        if (Scrolls && width > widest)
+        {
+            _textScale *= widest / width;
+            width = widest;
+        }
+
         var x = Alignment == Align.Left ? 0f : (ScreenView.Size.X - width) / 2f;
         for (var i = 0; i < _entries.Count; i++)
         {
-            _entries[i].Area = new RectangleF(x, RowTop(row, i + FirstRow), width, row);
+            // A scrolling page's rows off the list have no area (not drawn, not hit).
+            var shown = i - _scrollRow;
+            _entries[i].Area = Scrolls && (shown < 0 || shown >= _shownRows) ? RectangleF.Empty
+                : new RectangleF(x, RowTop(row, (Scrolls ? shown : i) + FirstRow), width, row);
         }
     }
 
+    /// <summary>The selection changed by keys or a new page: a scrolling list shows it.</summary>
+    private void Reveal()
+    {
+        if (!Scrolls)
+        {
+            _scrollRow = 0;
+            return;
+        }
+
+        _scrollRow = ClampScroll(_scrollRow);
+        if (!_reveal || _selected < 0)
+        {
+            return;
+        }
+
+        _reveal = false;
+        _scrollRow = ClampScroll(Math.Clamp(_scrollRow, _selected - _shownRows + 1, _selected));
+    }
+
+    /// <summary>A touch screen's row for a page whose fitted rows take the small font (the keys' pages):
+    /// grown by <paramref name="enlargement"/> as the short pages', but so that at least
+    /// <see cref="MinScrollRows"/> show; the rest scroll. 0: the page fits, it doesn't scroll.
+    /// <code>
+    ///   phone (× 1.4), 18 items: min(50.4, 350 / 8) = 43.75, 8 rows shown
+    ///   tablet (× 1):  18 items: 36, 9 rows shown
+    /// </code></summary>
+    public static float ScrollRow(int entries, int firstRow, float enlargement)
+    {
+        if (UsesBigFont(RowFor(entries + firstRow)))
+        {
+            return 0f;
+        }
+
+        return MathF.Max(Row, MathF.Min(Row * enlargement, (ScreenView.Size.Y - Top * 2f) / (MinScrollRows + firstRow)));
+    }
+
+    /// <summary>The whole rows a scrolling page shows below <paramref name="firstRow"/>.</summary>
+    public static int ShownRows(float row, int firstRow) => Math.Max((int)((ScreenView.Size.Y - Top * 2f) / row) - firstRow, 1);
+
     /// <summary>The height of a row for a page of <paramref name="entries"/> items: 36, less when they don't fit.</summary>
     public static float RowFor(int entries) => MathF.Min(Row, (ScreenView.Size.Y - Top * 2f) / Math.Max(entries, 1));
+
+    /// <summary>The height of a row grown by <paramref name="enlargement"/> as far as the page's
+    /// rows (from <paramref name="firstRow"/>) fit, never below <see cref="RowFor(int)"/>.
+    /// <code>
+    ///   phone, 6 items: min(36 × 1.4, 350 / 6) = 50.4
+    /// </code></summary>
+    public static float RowFor(int entries, int firstRow, float enlargement) =>
+        MathF.Max(RowFor(entries), MathF.Min(Row * enlargement, (ScreenView.Size.Y - Top * 2f) / Math.Max(entries + firstRow, 1)));
+
+    /// <summary>How much a touch screen's rows grow: to <see cref="TouchRowMm"/> from a row of
+    /// <paramref name="rowMm"/>, at most <see cref="MaxEnlargement"/> (1: no touch screen, or an
+    /// unknown display).
+    /// <code>
+    ///   phone  1080 px, 16.5 px/mm: a row of 108 px is 6.5 mm ─► × 1.4
+    ///   tablet 1800 px, 12.6 px/mm: 173 px, 13.7 mm ─► × 1
+    /// </code></summary>
+    public static float Enlargement(float rowMm) =>
+        rowMm > 0f ? Math.Clamp(TouchRowMm / rowMm, 1f, MaxEnlargement) : 1f;
+
+    /// <summary>The growth of this window's rows (<see cref="Enlargement(float)"/>).</summary>
+    private float Enlargement()
+    {
+        var window = _ui.Window;
+        var unitsPerMm = window.UnitsPerMm;
+        if (!window.HasTouchScreen || unitsPerMm <= 0f)
+        {
+            return 1f;
+        }
+
+        // A view unit in window units: the view's scale on the canvas, the canvas on the window.
+        var unit = _ui.View.Scale * window.Size.Height / Renderer.CanvasHeight;
+        return Enlargement(Row * unit / unitsPerMm);
+    }
 
     /// <summary>Rows below 24 use the small font.</summary>
     public static bool UsesBigFont(float row) => row >= SmallFontRow;
@@ -372,6 +558,12 @@ public sealed class MenuItems
 
     public void Draw()
     {
+        if (Visible && _touchPage != null)
+        {
+            _touchPage.Draw();
+            return;
+        }
+
         if (!Visible || _entries.Count == 0)
         {
             return;
@@ -379,16 +571,39 @@ public sealed class MenuItems
 
         // A press may have just opened another page: its items have no rows yet.
         Layout();
-        var row = _entries[0].Area.Height;
-        var font = UsesBigFont(row) ? _fonts.Big : _fonts.Small;
-        var baseline = MathF.Round(row * Baseline);
+        var font = UsesBigFont(_originalRow) ? _fonts.Big : _fonts.Small;
+        var baseline = MathF.Round(_row * Baseline);
         foreach (var entry in _entries)
         {
+            if (entry.Area.Height <= 0f)
+            {
+                continue;
+            }
+
             var text = Encoding.ASCII.GetBytes(entry.Text);
-            var x = entry.Area.X + (entry.Area.Width - font.Width(text) * entry.Grow) / 2f;
+            var grow = entry.Grow * _textScale;
+            var x = entry.Area.X + (entry.Area.Width - font.Width(text) * grow) / 2f;
             var alpha = entry.Disabled ? DisabledAlpha : 1f;
-            _ui.View.Text(font, text, MathF.Round(x), entry.Area.Y + baseline, entry.Grow, alpha);
+            _ui.View.Text(font, text, MathF.Round(x), entry.Area.Y + baseline, grow, alpha);
         }
+
+        DrawScrollBar();
+    }
+
+    /// <summary>A scrolling page's bar on the right: the list's height, the shown rows' part lit.</summary>
+    private void DrawScrollBar()
+    {
+        if (!Scrolls)
+        {
+            return;
+        }
+
+        var top = RowTop(_row, FirstRow);
+        var height = _row * _shownRows;
+        var x = ScreenView.Size.X - ScrollBarWidth * 2f;
+        _ui.View.Fill(new RectangleF(x, top, ScrollBarWidth, height), ScrollTrack);
+        var share = height / _entries.Count;
+        _ui.View.Fill(new RectangleF(x, top + share * _scrollRow, ScrollBarWidth, share * _shownRows), ScrollThumb);
     }
 
     // --- Options --------------------------------------------------------------------------------
@@ -400,7 +615,8 @@ public sealed class MenuItems
     ///            ├─ Graphics  look, anti-aliasing, gore
     ///            ├─ Audio     volumes, music filter
     ///            ├─ Keyboard & mouse  mouse, key bindings
-    ///            ├─ Gamepad   look, button bindings, touch controls (Android)
+    ///            ├─ Gamepad   look, button bindings
+    ///            ├─ Touch     touch controls, opacity, layout editor (a touch screen only)
     ///            ├─ Game      difficulty
     ///            └─ Mods      mods on/off, Make HD textures (desktop), Import from folder (Android)
     /// </code></summary>
@@ -408,12 +624,17 @@ public sealed class MenuItems
     {
         ClearPage();
         _back = back;
-        var pages = new (string Name, Action<Action> Show)[]
+        var pages = new List<(string Name, Action<Action> Show)>
         {
             ("Display", ShowDisplay), ("Graphics", ShowGraphics), ("3D Stereo", ShowStereo), ("Audio", ShowAudio),
             ("Keyboard & mouse", ShowControls), ("Gamepad", ShowGamepad), ("Game", ShowGame), ("Mods", ShowMods),
         };
-        for (var i = 0; i < pages.Length; i++)
+        if (HasTouchPage)
+        {
+            pages.Insert(pages.FindIndex(p => p.Show == ShowGamepad) + 1, ("Touch", ShowTouch));
+        }
+
+        for (var i = 0; i < pages.Count; i++)
         {
             var (name, show) = pages[i];
             var row = i;
@@ -461,7 +682,7 @@ public sealed class MenuItems
                     AddOption(ResolutionText, ResolutionStep);
                     break;
                 case DisplayItem.Scale:
-                    AddOption(() => $"Render scale: {s.RenderScale}%",
+                    AddOption(() => s.RenderScale == Renderer.AutoScale ? "Render scale: Auto" : $"Render scale: {s.RenderScale}%",
                         step => s.RenderScale = Renderer.Scales[Wrap(Array.IndexOf(Renderer.Scales, s.RenderScale) + step, Renderer.Scales.Length)]);
                     break;
                 case DisplayItem.VSync:
@@ -569,6 +790,11 @@ public sealed class MenuItems
         ClearPage();
         var s = _ui.Settings;
         AddOption(() => $"Difficulty: {DifficultyNames[(int)s.Difficulty]}", step => s.Difficulty = (Difficulty)Wrap((int)s.Difficulty + step, DifficultyNames.Length));
+
+        // The console's fps overlay, for phones without a keyboard (this session only).
+        var dev = _ui.Dev;
+        AddOption(() => $"FPS overlay: {OnOff(dev.Overlay == Switch.On)}", _ => dev.ToggleOverlay());
+        AddItem("Console", () => dev.ConsoleAsked = true);
         EndPage(back);
     }
 
@@ -698,18 +924,11 @@ public sealed class MenuItems
     }
 
     /// <summary>The gamepad's look, and its button bindings: choosing a binding waits for a button
-    /// (a key cancels: B and Start are buttons too). The sticks and Start (pause) are fixed. On a
-    /// touch screen, when its on-screen controls show (<see cref="TouchButtons"/>).</summary>
+    /// (a key cancels: B and Start are buttons too). The sticks and Start (pause) are fixed.</summary>
     public void ShowGamepad(Action back)
     {
         ClearPage();
         var s = _ui.Settings;
-        if (_ui.Window.HasTouchScreen)
-        {
-            AddOption(() => $"Touch controls: {s.Touch}",
-                step => s.Touch = (TouchButtons)Wrap((int)s.Touch + step, Enum.GetValues<TouchButtons>().Length));
-        }
-
         AddOption(() => string.Create(CultureInfo.InvariantCulture, $"Look sensitivity: {s.PadSensitivity:0.00}"),
             step => s.PadSensitivity = SensitivityStep(s.PadSensitivity, step));
         AddOption(() => $"Invert look: {OnOff(s.InvertPad)}", _ => s.InvertPad = !s.InvertPad);
@@ -734,6 +953,48 @@ public sealed class MenuItems
             ShowGamepad(back);
         });
         EndPage(back);
+    }
+
+    /// <summary>The Touch page: a touch screen's, or the desktop's with --touch-layout (tests).</summary>
+    private bool HasTouchPage => _ui.Window.HasTouchScreen || _ui.TouchEditor;
+
+    /// <summary>The on-screen controls: when they show (<see cref="TouchButtons"/>, a touch screen
+    /// only), their opacity, and the layout editor.</summary>
+    public void ShowTouch(Action back)
+    {
+        ClearPage();
+        var s = _ui.Settings;
+        if (_ui.Window.HasTouchScreen)
+        {
+            AddOption(() => $"Touch controls: {s.Touch}",
+                step => s.Touch = (TouchButtons)Wrap((int)s.Touch + step, Enum.GetValues<TouchButtons>().Length));
+        }
+
+        AddOption(() => $"Touch opacity: {s.TouchOpacity}%", step => s.TouchOpacity = OpacityStep(s.TouchOpacity, step));
+        // Back on its row.
+        var row = _entries.Count;
+        AddItem("Edit touch layout", () => ShowTouchLayout(() =>
+        {
+            ShowTouch(back);
+            Select(row);
+        }));
+        EndPage(back);
+    }
+
+    /// <summary>The touch layout editor (<see cref="TouchEditor"/>); Back cancels it.</summary>
+    public void ShowTouchLayout(Action back)
+    {
+        ClearPage();
+        _back = back;
+        _touchView ??= new TouchView(_ui.Renderer, _fonts.Small);
+        _touchPage = new TouchLayoutPage(_ui, _touchView, back);
+    }
+
+    /// <summary>The next opacity of the list (wrapping; from full when it isn't in it).</summary>
+    public static int OpacityStep(int value, int step)
+    {
+        var index = Array.IndexOf(TouchOpacities, value);
+        return TouchOpacities[Wrap((index >= 0 ? index : TouchOpacities.Length - 1) + step, TouchOpacities.Length)];
     }
 
     /// <summary>The key or button pressed after the item was chosen becomes the binding.</summary>

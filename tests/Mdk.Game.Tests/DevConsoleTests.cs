@@ -1,3 +1,5 @@
+using System.Drawing;
+using System.Numerics;
 using Mdk.Engine.Diagnostics;
 using Mdk.Engine.Platform;
 using Mdk.Game.DevTools;
@@ -8,6 +10,19 @@ namespace Mdk.Game.Tests;
 /// <summary>The console's parts: parsing, the registry, completion, history, the input line, its keys.</summary>
 public class DevConsoleTests
 {
+    [Fact]
+    public void TouchesOnTheConsoleFindItsParts()
+    {
+        // The open console (bottom at 180) on a phone's 800-wide canvas, a cut-out's 69 on the left.
+        var close = ConsoleView.CloseArea(180f, RectangleF.FromLTRB(69f, 0f, 774f, 360f));
+
+        Assert.Equal(new RectangleF(738f, 4f, 32f, 32f), close);
+        Assert.Equal(ConsoleSpot.Close, ConsoleView.Spot(new Vector2(750f, 20f), 180f, close));
+        Assert.Equal(ConsoleSpot.Log, ConsoleView.Spot(new Vector2(300f, 100f), 180f, close));
+        Assert.Equal(ConsoleSpot.Line, ConsoleView.Spot(new Vector2(300f, 175f), 180f, close));
+        Assert.Equal(ConsoleSpot.Below, ConsoleView.Spot(new Vector2(300f, 250f), 180f, close));
+    }
+
     [Fact]
     public void LinesSplitIntoCommandsAndWords()
     {
@@ -120,6 +135,21 @@ public class DevConsoleTests
         Assert.False(input.WasPressed(RawKey.Grave));
     }
 
+    /// <summary>A phone's Back button (no Escape key there) closes the open console.</summary>
+    [Fact]
+    public void BackClosesTheConsole()
+    {
+        var console = NewConsole(new LogRing(10), out _);
+        console.Toggle();
+        var input = new Input();
+        input.BeginFrame();
+        input.SetKey(SDL_Scancode.SDL_SCANCODE_AC_BACK, Input.State.Down, Repeat.No);
+
+        console.Update(input, 0f);
+
+        Assert.Equal(ConsoleState.Closed, console.State);
+    }
+
     /// <summary>Any screen: while the console is open (and on the frame Grave opens it) the screen
     /// gets no keys, typing, clicks or mouse; keys held by tests stay. Closed, input passes.</summary>
     [Fact]
@@ -159,6 +189,29 @@ public class DevConsoleTests
         Assert.Equal(0f, input.MouseX);
         Assert.Equal("", input.Typed);
         Assert.True(input.IsDown(Key.Jump));
+    }
+
+    [Fact]
+    public void KeyboardCorrectionsEraseInOrder()
+    {
+        // A phone's keyboard corrects "fps" to "gps": three Backspaces, then the new word, in one frame.
+        var console = NewConsole(new LogRing(10), out _);
+        console.Toggle();
+        var input = new Input();
+        input.BeginFrame();
+        input.AddText("fps");
+        console.Update(input, Step);
+
+        input.BeginFrame();
+        for (var i = 0; i < 3; i++)
+        {
+            input.SetKey(SDL_Scancode.SDL_SCANCODE_BACKSPACE, Input.State.Down, Repeat.No);
+            input.SetKey(SDL_Scancode.SDL_SCANCODE_BACKSPACE, Input.State.Up, Repeat.No);
+        }
+
+        input.AddText("gps");
+        console.Update(input, Step);
+        Assert.Equal("gps", console.Line);
     }
 
     [Fact]

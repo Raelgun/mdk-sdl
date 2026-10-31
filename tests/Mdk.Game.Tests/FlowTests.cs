@@ -178,6 +178,45 @@ public class FlowTests
         Assert.Equal(big, MenuItems.UsesBigFont(MenuItems.RowFor(entries)));
     }
 
+    [Theory]
+    [InlineData(6, 0, 1f, 36f)]
+    [InlineData(6, 0, 1.4f, 36f * 1.4f)]
+    [InlineData(8, 0, 1.4f, 350f / 8f)]
+    [InlineData(6, 2, 1.4f, 350f / 8f)]
+    [InlineData(17, 0, 1.4f, 350f / 17f)]
+    public void TouchRowsGrowAsFarAsThePageFits(int entries, int firstRow, float enlargement, float row)
+    {
+        // A desktop's rows (1) are the original's; a full page's can't grow.
+        Assert.Equal(row, MenuItems.RowFor(entries, firstRow, enlargement), 3);
+    }
+
+    [Theory]
+    [InlineData(6.5f, 1.4f)]
+    [InlineData(8f, 1.25f)]
+    [InlineData(13.7f, 1f)]
+    [InlineData(0f, 1f)]
+    public void TouchRowsGrowToTenMillimetres(float rowMm, float enlargement)
+    {
+        // A phone's 108-pixel rows (6.5 mm) grow by the most; a tablet's are big enough.
+        Assert.Equal(enlargement, MenuItems.Enlargement(rowMm), 3);
+    }
+
+    [Theory]
+    [InlineData(22, 0, 1.4f, 350f / 8f, 8)]
+    [InlineData(16, 0, 1f, 36f, 9)]
+    [InlineData(9, 0, 1.4f, 0f, 0)]
+    [InlineData(10, 0, 1.4f, 0f, 0)]
+    public void LongTouchPagesScroll(int entries, int firstRow, float enlargement, float row, int shown)
+    {
+        // The keys' page (22 items) on a phone: 8 grown rows show, the rest scroll; a page that
+        // fits with the big font (the options' 10) doesn't scroll.
+        Assert.Equal(row, MenuItems.ScrollRow(entries, firstRow, enlargement), 3);
+        if (shown > 0)
+        {
+            Assert.Equal(shown, MenuItems.ShownRows(row, firstRow));
+        }
+    }
+
     [Fact]
     public void QuitTitleStandsAtRow3() => Assert.Equal(113f, MenuItems.RowTop(MenuItems.RowFor(3), 3));
 

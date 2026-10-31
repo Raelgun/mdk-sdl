@@ -21,8 +21,11 @@ public sealed class FollowCamera(ArenaSpace? space = null)
     public const float FieldOfView = 71.5f;
     private const float Distance = 8f;
     private const float MouseDegrees = 0.15f;
-    private const float MinPitch = -60f;
-    private const float MaxPitch = 90f;
+    /// <summary>The mouse's look stops at this pitch (the original's keys: −60° to 90°, back to 0 once
+    /// let go). Further down Kurt's sprite lies flat under the camera and floors ahead hide it;
+    /// further up the camera sinks to his feet, through the floor on a slope.</summary>
+    private const float LookUpLimit = -30f;
+    private const float LookDownLimit = 60f;
     /// <summary>The view's pitch stays short of straight up or down: past it the view turns over.</summary>
     private const float ViewPitchLimit = 89f;
     private const float AirPitchRate = 0.667f * Kurt.Ticks;
@@ -128,8 +131,9 @@ public sealed class FollowCamera(ArenaSpace? space = null)
             _airPitch = MathF.Max(_airPitch, MathF.Min(_airTime * AirPitchRate, AirPitchMax));
         }
 
-        _lookOffset = Math.Clamp(_lookOffset, MinPitch - _arenaPitch - _airPitch, MaxPitch - _arenaPitch - _airPitch);
-        var pitch = ViewPitch(_arenaPitch + _lookOffset + _airPitch - ClimbPitch * _climb + kurt.CameraTilt);
+        var auto = _arenaPitch + _airPitch - ClimbPitch * _climb + kurt.CameraTilt;
+        _lookOffset = ClampLook(_lookOffset, auto);
+        var pitch = ViewPitch(auto + _lookOffset);
         var facing = kurt.Facing;
         Position = Point(kurt.Feet, facing, pitch, kurt.CameraPivot);
         if (space != null && !kurt.Sniping && !kurt.Frozen && kurt.Current != Kurt.State.Dead)
@@ -141,10 +145,15 @@ public sealed class FollowCamera(ArenaSpace? space = null)
         UpdateShake(delta);
         Turn(ShakeOffset * float.DegreesToRadians(FieldOfView) / ViewHeight, float.DegreesToRadians(kurt.CameraRoll.Roll));
 
-        var aim = new Aim(_arenaPitch + _airPitch - ClimbPitch * _climb + kurt.CameraTilt, kurt.CameraPivot, kurt.CameraRoll.Roll);
+        var aim = new Aim(auto, kurt.CameraPivot, kurt.CameraRoll.Roll);
         _previousAim = _previousAim == null ? aim : _aim;
         _aim = aim;
     }
+
+    /// <summary>The mouse's <paramref name="look"/> (degrees) kept from turning the view past the look
+    /// limits; the <paramref name="auto"/> pitch (arena, air, climb) alone may go past them.</summary>
+    private static float ClampLook(float look, float auto) =>
+        Math.Clamp(look, MathF.Min(LookUpLimit - auto, 0f), MathF.Max(LookDownLimit - auto, 0f));
 
     /// <summary>The view's pitch (radians) for <paramref name="degrees"/> down, short of straight up or
     /// down: at 90° the view's up has no way to point, and the float cosine's sign turned it over.</summary>
@@ -167,7 +176,7 @@ public sealed class FollowCamera(ArenaSpace? space = null)
             return;
         }
 
-        _lookOffset = Math.Clamp(_lookOffset + input.TakeMouseY() * MouseDegrees, MinPitch - _arenaPitch - _airPitch, MaxPitch - _arenaPitch - _airPitch);
+        _lookOffset = ClampLook(_lookOffset + input.TakeMouseY() * MouseDegrees, _aim.Pitch);
     }
 
     /// <summary>A frame between steps: the camera placed again for Kurt as drawn (<paramref name="feet"/>,
@@ -398,7 +407,7 @@ public sealed class FollowCamera(ArenaSpace? space = null)
         return feet + facing * back + Vector3.UnitZ * (pivot + distance * MathF.Sin(pitch));
     }
 
-    public View View(float aspect) => CameraMath.View(Position, Forward, Up, FieldOfView, aspect, Near, Far);
+    public View View(float aspect) => CameraMath.View(Position, Forward, Up, CameraMath.KeepWidth(FieldOfView, aspect), aspect, Near, Far);
 
     /// <summary>Sniper mode: the view from Kurt's eye through the scope.</summary>
     public static View SniperView(Kurt kurt, float aspect) => SniperView(kurt.SniperEye, kurt.SniperForward, kurt.Scope.Zoom, aspect);
@@ -415,6 +424,26 @@ public sealed class FollowCamera(ArenaSpace? space = null)
 /// <summary>View matrices for a camera (MDK coordinates, Z up).</summary>
 public static class CameraMath
 {
+    /// <summary>The original's screen: 4:3.</summary>
+    private const float OriginalAspect = 4f / 3f;
+
+    /// <summary>A vertical field of view that keeps a 4:3 view's width on a narrower screen (a
+    /// near-square foldable sees as far left and right, more above and below); wider screens see
+    /// more at the sides at the same height.
+    /// <code>
+    ///   aspect ≥ 4:3: fov (Hor+)    aspect &lt; 4:3: 2 atan(tan(fov / 2) × (4/3) / aspect) (Vert-)
+    /// </code></summary>
+    public static float KeepWidth(float fieldOfView, float aspect)
+    {
+        if (aspect >= OriginalAspect || aspect <= 0f)
+        {
+            return fieldOfView;
+        }
+
+        var half = MathF.Tan(float.DegreesToRadians(fieldOfView) / 2f) * OriginalAspect / aspect;
+        return float.RadiansToDegrees(2f * MathF.Atan(half));
+    }
+
     public static View View(Vector3 position, Vector3 forward, Vector3 up, float fieldOfView, float aspect, float near, float far)
     {
         var view = Matrix4x4.CreateLookAt(position, position + forward, up);

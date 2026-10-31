@@ -253,6 +253,10 @@ public sealed partial class ScriptRuntime
 
     /// <summary>Ticks left before the minecrawler flattens the town (0x574270); none on the last level.</summary>
     public int TownTicks;
+    /// <summary>The time left for the town (0x574270 over 0x574274), 1 without one.</summary>
+    public float TownTimeLeft => _townTotal == 0 ? 1f : Math.Clamp((float)TownTicks / _townTotal, 0f, 1f);
+    /// <summary>The town's whole time; saved, since saves have no difficulty.</summary>
+    private int _townTotal;
     public string CurrentArena = "";
     /// <summary>The second arena (0x573a68): behind an open door, the one Kurt just left, or one loaded
     /// ahead; when active (0x573a6c) its objects and script run too.</summary>
@@ -308,6 +312,8 @@ public sealed partial class ScriptRuntime
     private readonly Stack<List<int>> _spareVoiceLists = new();
     private readonly List<string> _loadedArenas = [];
     private readonly List<string> _drawnArenas = [];
+    /// <summary>The camera's arena is looked for from this high above Kurt's feet (0x4940f0).</summary>
+    private const float CameraLineHeight = 3f;
     /// <summary>The one arena (not corridor) loaded (_g_current_arena); its corridors are loaded too.</summary>
     private string _residentArena = "";
     private int _nextInstance = 1000;
@@ -366,7 +372,7 @@ public sealed partial class ScriptRuntime
         // No town to save in the last level, nor in the 1996 demo's.
         if (GameStats.IndexOf(level.Number) != LastLevelIndex && !IsBeta)
         {
-            TownTicks = TownTicksByDifficulty[(int)Kurt.Inventory.Difficulty];
+            TownTicks = _townTotal = TownTicksByDifficulty[(int)Kurt.Inventory.Difficulty];
         }
     }
 
@@ -697,6 +703,20 @@ public sealed partial class ScriptRuntime
         {
             obj.Visible = drawn.Contains(obj.Arena) && !Rides.Hides(obj);
         }
+    }
+
+    /// <summary>The drawn arena the camera is in (0x490db4, camera_update): Kurt's, or the second one
+    /// when the line from above Kurt's feet to the <paramref name="eye"/> leaves Kurt's through a
+    /// doorway into it. It's drawn over the other (0x41df35).</summary>
+    public string CameraArena(Vector3 eye)
+    {
+        if (_drawnArenas.Count < 2)
+        {
+            return CurrentArena;
+        }
+
+        var from = KurtPosition + Vector3.UnitZ * CameraLineHeight;
+        return CrossedArena(CurrentArena, from, eye) == SecondArena ? SecondArena : CurrentArena;
     }
 
     /// <summary>Whether an arena's objects run: Kurt's, and the second one when it's active.</summary>

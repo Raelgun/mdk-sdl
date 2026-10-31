@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
+using System.Runtime;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Mdk.Engine.Audio;
@@ -165,7 +166,19 @@ public sealed class Viewer : IScreen
     /// <summary>What the level took from the mods (the enhanced look's).</summary>
     private readonly ModReport _mods = ModReport.None;
 
-    public Viewer(Ui ui, ViewerOptions options, GameState state)
+    /// <summary>How far the loading is after each part: its share of the time on a desktop, the
+    /// GPU's uploads of the part (at the next frame of the loading screen) included.</summary>
+    private static class Loaded
+    {
+        public const float Data = 0.06f;
+        public const float Geometry = 0.46f;
+        public const float Light = 0.55f;
+        public const float Kurt = 0.86f;
+        public const float Scripts = 0.89f;
+        public const float All = 1f;
+    }
+
+    public Viewer(Ui ui, ViewerOptions options, GameState state, LoadProgress progress)
     {
         var loading = Stopwatch.StartNew();
         _ui = ui;
@@ -188,8 +201,10 @@ public sealed class Viewer : IScreen
         ui.ScanMods();
         var mods = graphics == Graphics.Enhanced ? ui.ModImages(level.Number) : null;
         var surfaces = new MaterialResolver(renderer, level.Dti, EnhancedLook.Surfaces(graphics), mods);
+        progress.Report(Loaded.Data);
         Preload(surfaces, level);
         _view = new LevelView(renderer, level, groups, EnhancedLook.Surfaces(graphics), surfaces);
+        progress.Report(Loaded.Geometry);
         var bank = _beta != null ? SoundBank.ForBeta(_beta, options.Level) : SoundBank.ForLevel(data, options.Level, level.Arenas);
         bank.Preload();
         _mixer = new SoundMixer(_audio, bank.Get);
@@ -200,6 +215,7 @@ public sealed class Viewer : IScreen
         renderer.Panorama = CreatePanorama(renderer, level.Dti) with { Sampling = EnhancedLook.Sky(graphics) };
         renderer.Lighting = null;
         _light = graphics == Graphics.Enhanced ? new LevelLight(renderer, level) : null;
+        progress.Report(Loaded.Light);
 
         _space = new ArenaSpace();
         foreach (var arena in level.Arenas.Where(a => level.IsReachable(a.Name)))
@@ -211,6 +227,7 @@ public sealed class Viewer : IScreen
         var sprites = Bni.Load(data.PathOf("TRAVERSE/TRAVSPRT.BNI"));
         _beta?.AddSprites(sprites);
         _sprite = new KurtSprite(renderer, sprites, level.Dti.Palette, EnhancedLook.Sprites(graphics), mods);
+        progress.Report(Loaded.Kurt);
         foreach (var name in KurtSprite.LevelAnimations)
         {
             _sprite.Add(bank.Animation(name));
@@ -243,6 +260,7 @@ public sealed class Viewer : IScreen
 
         // The HUD; pickups show their names (0x46c448).
         _hud = new HudView(renderer, sprites, level.Dti.Palette, ui.Fti, mods);
+        progress.Report(Loaded.Scripts);
         _scripts.Messages = _hud.Messages;
         CarryFromFall(state);
         RestoreSnapshot(state);
@@ -255,7 +273,7 @@ public sealed class Viewer : IScreen
         }
         _scripts.ArenaEntered += _view.Enter;
         // The mods' models (the enhanced look's); collisions keep the originals.
-        var swaps = mods != null ? ModModels.Load(ui.Mods.Folders(ui.Settings), level.Number, _scripts.LevelModels().Concat(level.Arenas.SelectMany(a => a.Models.Values))) : null;
+        var swaps = mods != null ? ModModels.Load(ui.Mods.Files(ui.Settings), level.Number, _scripts.LevelModels().Concat(level.Arenas.SelectMany(a => a.Models.Values))) : null;
         _objects = new ObjectView(renderer, surfaces) { Swaps = swaps };
         _scripts.PreparePoses();
         PreloadModels(level);
@@ -269,7 +287,7 @@ public sealed class Viewer : IScreen
         _soak = options.Soak != null ? new SoakTest(level, _space, options.Route, options.Wait) : null;
         _fly = new FreeCamera { Pitch = options.Pitch };
         _flying = options.Fly;
-        _pause = new PauseMenu(ui);
+        _pause = new PauseMenu(ui, new PauseMenu.Quick(OpenSnapshot, QuickLoad, CanQuickLoad));
         Console.WriteLine($"Level {options.Level}: {level.Arenas.Count} arenas, {_view.TriangleCount} triangles, {_view.OutlineCount} outlines, loaded in {loading.ElapsedMilliseconds} ms");
         var enabled = ui.Mods.Enabled(ui.Settings).Count;
         if (mods != null && enabled > 0)
@@ -277,6 +295,9 @@ public sealed class Viewer : IScreen
             _mods = new ModReport(enabled, mods.Found, swaps?.Found ?? []);
             Console.WriteLine($"Mods: {_mods.Summary}; textures {surfaces.ModFound} of {surfaces.ModLooked}, colour textures {renderer.ColourBytes >> 20} MB");
         }
+
+        // The HD images are the renderer's now: hundreds of MB the level's lookups no longer need.
+        mods?.Trim();
 
         _test = options.Screenshot != null || options.Frames != null;
         _blending = _test && options.FrameRate == null ? Blending.Off : Blending.On;
@@ -289,6 +310,7 @@ public sealed class Viewer : IScreen
         _commands.SetNoclip(ui.Dev.Noclip);
         _commands.SetOneHit(ui.Dev.OneHit);
         EnterStartArena(state);
+        progress.Report(Loaded.All);
     }
 
     /// <summary>The console's map: Kurt starts on a floor of the arena asked for.</summary>
@@ -338,6 +360,8 @@ public sealed class Viewer : IScreen
         }
     }
 
+    public Typing Typing => _snapshotPrompt?.Typing ?? Typing.Off;
+
     /// <summary>The counts of the level (for the statistics).</summary>
     public GameStats Stats => _scripts.Stats;
 
@@ -360,6 +384,37 @@ public sealed class Viewer : IScreen
 
         _kurt.SetHealth(carry.Health);
         Console.WriteLine($"Level starts with the fall's health {carry.Health} and pickups {string.Join(",", carry.Pickups)}");
+    }
+
+    /// <summary>Whether the load's garbage was collected (<see cref="Settle"/>).</summary>
+    private bool _settled;
+
+    /// <summary>After the first frame (the HD images are on the GPU, the renderer dropped them):
+    /// one compacting collection gives the load's large arrays back at once, not over play's
+    /// collections (Android: 36 full ones, a 627 MB heap).</summary>
+    private void Settle()
+    {
+        if (_settled)
+        {
+            return;
+        }
+
+        _settled = true;
+        CompactLargeObjects();
+        GC.Collect();
+    }
+
+    /// <summary>The next full collection compacts the large object heap too. Mono (Android)
+    /// has no such mode: its setter throws, and its collector compacts as it sees fit.</summary>
+    private static void CompactLargeObjects()
+    {
+        try
+        {
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+        }
+        catch (PlatformNotSupportedException)
+        {
+        }
     }
 
     public Event Frame(float elapsed, string? screenshot)
@@ -385,7 +440,9 @@ public sealed class Viewer : IScreen
             var paused = _pause.Update(elapsed);
             _renderer.Present(SceneView(), Background(), screenshot);
             CaptureMouse();
-            return paused;
+
+            // Its Quick load reloads at once.
+            return paused == Event.None ? _next : paused;
         }
 
         if (input.WasPressed(MenuKey.Back) && _scripts.Strike is not { Active: true })
@@ -469,6 +526,8 @@ public sealed class Viewer : IScreen
             _renderer.Present(camera, Background(), save);
         }
 
+        Settle();
+
         if (save == null)
         {
             return _next;
@@ -524,6 +583,11 @@ public sealed class Viewer : IScreen
             {
                 _music.Enter(_scripts.CurrentArena);
                 _music.Update(Step);
+            }
+
+            if (_level.ArenaNamed(_scripts.CurrentArena) is { } arena)
+            {
+                _hud.Enter(_level.PaletteOf(arena));
             }
 
             if (CutsceneCamera.Active(_scripts))
@@ -700,12 +764,15 @@ public sealed class Viewer : IScreen
         _scripts.Eye = camera.Position;
         _light?.Update(_scripts, _kurt);
         using var render = _ui.Dev.Profiler.Measure(Section.Scene);
-        _view.Draw(_scripts.DrawnArenas, _scripts.AnimatedTextures);
-        _view.DrawEnd(_scripts.EndLevel);
-        DrawObjects(_objects, _scripts, _level, _looks, _blend);
-        _ropes.Draw(_scripts.Objects, _blend);
+        // The camera's arena covers the other drawn one (ArenaBand); Kurt and his board are in front.
+        var cameraArena = _scripts.CameraArena(camera.Position);
+        _view.Draw(_scripts.DrawnArenas, _scripts.AnimatedTextures, cameraArena);
+        _view.DrawEnd(_scripts.EndLevel, cameraArena);
+        DrawObjects(_renderer, _objects, _scripts, _level, _looks, _blend, cameraArena);
+        DrawBoard(camera.Position, eye.Forward);
+        _ropes.Draw(_scripts.Objects, _blend, cameraArena);
         _sniper.Draw(_kurt, _scripts, _blend, elapsed);
-        _effects.Draw(_scripts, camera, _blend.Tick);
+        _effects.Draw(_scripts, camera, _blend.Tick, cameraArena);
         _sprite.Draw(_kurt, _blend.Feet, camera.Position, eye.Forward, eye.Up, eye.FieldOfView, _space);
 
         _hud.Messages.Update(elapsed);
@@ -824,6 +891,9 @@ public sealed class Viewer : IScreen
         _next = save.Kind == SaveKind.BeforeLevel ? Event.Briefing : Event.Play;
     }
 
+    /// <summary>Whether quick load has a save to load (the pause menu's Quick load).</summary>
+    private bool CanQuickLoad() => SaveGames.In(_ui.UserFolder).QuickSlot(_state.QuickSlot) != null;
+
     /// <summary>A message of the port's own on the HUD (zooming, ahead of the others), also printed.</summary>
     private void Notify(string text)
     {
@@ -857,10 +927,11 @@ public sealed class Viewer : IScreen
         return _state.Save(SaveKind.Snapshot) with { Health = _kurt.Health, State = json };
     }
 
-    /// <summary>The mouse looks around again once the pause menu closes.</summary>
+    /// <summary>The mouse looks around again once the pause menu closes (not under F2's prompt,
+    /// which the menu's Quick save opens).</summary>
     private void CaptureMouse()
     {
-        if (!_pause.Open)
+        if (!_pause.Open && _snapshotPrompt == null)
         {
             _ui.Window.CaptureMouse(_test ? Capture.Off : Capture.On);
         }
@@ -920,7 +991,7 @@ public sealed class Viewer : IScreen
 
         var (barHealth, barMax) = scripts.GetBar();
         return new HudState(kurt.Health, kurt.HurtFlash, kurt.WhiteFlash, kurt.Current == Kurt.Kurt.State.Dead,
-            slots, inventory.Selected, inventory.SuperChainGun, barHealth, barMax, scripts.Rides.Bomber?.Shown);
+            slots, inventory.Selected, inventory.SuperChainGun, barHealth, barMax, scripts.Rides.Bomber?.Shown, scripts.TownTimeLeft);
     }
 
     /// <summary>Lays out the models before they're drawn: each arena's own, and those of the objects
@@ -955,18 +1026,36 @@ public sealed class Viewer : IScreen
         }
     }
 
-    /// <summary>The visible objects, each with its arena's palette and textures.</summary>
-    private static void DrawObjects(ObjectView view, ScriptRuntime scripts, LevelData level, Dictionary<string, ObjectView.Look> looks, FrameBlend blend)
+    /// <summary>The visible objects, each with its arena's palette, textures and depth band.</summary>
+    private static void DrawObjects(Renderer renderer, ObjectView view, ScriptRuntime scripts, LevelData level,
+        Dictionary<string, ObjectView.Look> looks, FrameBlend blend, string camera)
     {
         foreach (var obj in scripts.Objects)
         {
-            if (!obj.Visible)
+            if (!obj.Visible || IsBoard(scripts, obj))
             {
                 continue;
             }
 
+            renderer.Band = ArenaBand.Of(obj.Arena, camera);
             view.Draw(obj, ObjectLook(level, looks, obj.Arena), blend.TransformOf(obj), blend.PoseOf(obj));
         }
+
+        renderer.Band = DepthBand.Front;
+    }
+
+    private static bool IsBoard(ScriptRuntime scripts, MdkObject obj) => scripts.Rides.OnBoard() && obj == scripts.Rides.Ridden;
+
+    /// <summary>The ridden board, in front of the floors it stands above (<see cref="FloorPull"/>).</summary>
+    private void DrawBoard(Vector3 eye, Vector3 forward)
+    {
+        if (_scripts.Rides.Ridden is not { Visible: true } board || !IsBoard(_scripts, board))
+        {
+            return;
+        }
+
+        var transform = FloorPull.Of(board, _blend.TransformOf(board), eye, forward, _space);
+        _objects.Draw(board, ObjectLook(_level, _looks, board.Arena), transform, _blend.PoseOf(board));
     }
 
     /// <summary>An arena's palette and textures for its objects (the level's outside the arenas).</summary>

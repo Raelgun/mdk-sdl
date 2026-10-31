@@ -1,13 +1,15 @@
 using System.Numerics;
+using System.Text;
 using Mdk.Engine.Audio;
 using Mdk.Engine.Platform;
 using Mdk.Formats;
+using Mdk.Game.DevTools;
 using Mdk.Game.Flow;
 
 namespace Mdk.Game.Menu;
 
 /// <summary>How the main menu opens (command line): its first page.</summary>
-public enum MenuPage { Main, Options, Controls, Gamepad, BetaLevels }
+public enum MenuPage { Main, Options, Controls, Gamepad, BetaLevels, TouchLayout }
 
 /// <summary>The main menu (main_menu.gd): <c>MDK12.FLC</c> plays behind it each time it opens
 /// (0x4260e4), its last frame stays, then the slideshow; <c>MDKOPT</c> is the background when the
@@ -70,6 +72,9 @@ public sealed class MainMenu : IScreen
     private Page _page;
     private Event _next = Event.None;
     private bool _videoStarted;
+    /// <summary>The game's version, in the menu's bottom right corner (bug reports name it).</summary>
+    private static readonly byte[] Version = Encoding.ASCII.GetBytes(BuildInfo.Current().Version);
+    private const float VersionMargin = 6f;
 
     public MainMenu(Ui ui, GameState state, SaveGames saves, MenuPage first)
     {
@@ -113,6 +118,11 @@ public sealed class MainMenu : IScreen
         {
             _items.ShowGamepad(ShowOptions);
         }
+        else if (first == MenuPage.TouchLayout)
+        {
+            ShowOptions();
+            _items.ShowTouchLayout(() => _items.ShowTouch(ShowOptions));
+        }
         else if (first == MenuPage.BetaLevels && ui.Beta != null)
         {
             ShowBetaLevels();
@@ -149,6 +159,7 @@ public sealed class MainMenu : IScreen
 
         _video.Draw();
         _items.Draw();
+        DrawVersion();
         _ui.Present(screenshot);
         return _next;
     }
@@ -159,6 +170,18 @@ public sealed class MainMenu : IScreen
             : !_slideshow.ItemsShown ? "main menu: slideshow"
             : _video.Playing ? $"main menu: {_page}, video" : $"main menu: {_page}",
     ];
+
+    private void DrawVersion()
+    {
+        if (!_slideshow.ItemsShown)
+        {
+            return;
+        }
+
+        var font = _fonts.Small;
+        var x = ScreenView.Size.X - VersionMargin - font.Width(Version);
+        _ui.View.Text(font, Version, x, ScreenView.Size.Y - VersionMargin);
+    }
 
     private void StartVideo()
     {

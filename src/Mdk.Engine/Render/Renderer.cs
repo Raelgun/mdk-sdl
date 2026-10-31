@@ -146,6 +146,10 @@ public readonly record struct RenderStats(int DrawCalls, int Triangles, float Gp
 /// <summary>Whether a frame returns once submitted, or waits until the GPU has drawn it (measures).</summary>
 public enum GpuSync { Async, Wait }
 
+/// <summary>Where a hidden window's frames go: off screen only, or also through its swapchain as a
+/// shown window's do (tests).</summary>
+public enum HiddenFrames { Offscreen, Swapchain }
+
 /// <summary>Draws paletted triangle meshes with SDL_GPU.
 /// <code>
 ///  game ──► Renderer ──► offscreen colour + depth ──blit──► swapchain
@@ -212,7 +216,7 @@ public sealed unsafe partial class Renderer : IDisposable
     private const string ShaderProbe = "shaders/palette.vs";
 
     private readonly record struct DrawCommand(int Mesh, int First, int Count, Material Material, int Frame, Matrix4x4 World,
-        Primitive Primitive = Primitive.Triangles);
+        Primitive Primitive = Primitive.Triangles, DepthBand Band = DepthBand.Front);
 
     /// <summary>The 2D canvas: <see cref="CanvasHeight"/> units high like the original's view, as
     /// wide as the window's aspect makes it; quads collected each frame into one dynamic mesh.</summary>
@@ -293,6 +297,26 @@ public sealed unsafe partial class Renderer : IDisposable
         int width, height;
         SDL_GetWindowSize(_window.Handle, &width, &height);
         return height <= 0 ? Vector2.Zero : new Vector2(x, y) * (CanvasHeight / height);
+    }
+
+    /// <summary>The canvas clear of the window's cut-outs and rounded corners (its safe area's
+    /// insets taken off the whole canvas); all of it on a desktop.</summary>
+    public RectangleF CanvasSafeArea
+    {
+        get
+        {
+            var canvas = new RectangleF(0f, 0f, CanvasWidth, CanvasHeight);
+            var (width, height) = _window.Size;
+            var safe = _window.SafeArea;
+            if (height <= 0 || safe == new RectangleF(0f, 0f, width, height))
+            {
+                return canvas;
+            }
+
+            var scale = CanvasHeight / height;
+            return RectangleF.FromLTRB(safe.Left * scale, safe.Top * scale,
+                canvas.Right - (width - safe.Right) * scale, canvas.Bottom - (height - safe.Bottom) * scale);
+        }
     }
 
     /// <summary>The textures and meshes created so far; <see cref="Release"/> frees those created after.</summary>
@@ -819,17 +843,20 @@ public sealed unsafe partial class Renderer : IDisposable
         }
     }
 
+    /// <summary>The depth band of the draws queued from now on (front again after each frame).</summary>
+    public DepthBand Band { get; set; }
+
     /// <summary>Queues triangles of a mesh for the next frame; <paramref name="frame"/> picks an animated texture's frame.</summary>
     public void Draw(int mesh, int firstVertex, int vertexCount, Material material, int frame = 0) =>
-        Queue.Add(new DrawCommand(mesh, firstVertex, vertexCount, material, frame, Matrix4x4.Identity));
+        Queue.Add(new DrawCommand(mesh, firstVertex, vertexCount, material, frame, Matrix4x4.Identity, Band: Band));
 
     /// <summary>Queues triangles of a mesh placed in the world by <paramref name="world"/> (models).</summary>
     public void Draw(int mesh, int firstVertex, int vertexCount, Material material, int frame, Matrix4x4 world) =>
-        Queue.Add(new DrawCommand(mesh, firstVertex, vertexCount, material, frame, world));
+        Queue.Add(new DrawCommand(mesh, firstVertex, vertexCount, material, frame, world, Band: Band));
 
     /// <summary>Queues lines of a mesh (two vertices each) in a material's colour (not a mirror).</summary>
     public void DrawLines(int mesh, int firstVertex, int vertexCount, Material material) =>
-        Queue.Add(new DrawCommand(mesh, firstVertex, vertexCount, material, 0, Matrix4x4.Identity, Primitive.Lines));
+        Queue.Add(new DrawCommand(mesh, firstVertex, vertexCount, material, 0, Matrix4x4.Identity, Primitive.Lines, Band));
 
     /// <summary>Draws the queued batches (opaque first, then blended) and shows them. With
     /// <paramref name="screenshot"/>, also saves the frame as a BMP.</summary>
@@ -841,8 +868,8 @@ public sealed unsafe partial class Renderer : IDisposable
         SDL_GPUTexture* swapchain = null;
         uint width = (uint)HiddenSize.Width, height = (uint)HiddenSize.Height;
 
-        // A hidden window has no swapchain to show: the frame stays in the offscreen target.
-        var shown = _window.Visibility == Visibility.Shown;
+        // A hidden window has no swapchain to show (unless tests ask): the frame stays in the offscreen target.
+        var shown = _window.Visibility == Visibility.Shown || HiddenFrames == HiddenFrames.Swapchain;
         var waitStart = Stopwatch.GetTimestamp();
         if (shown && (!SDL_WaitAndAcquireGPUSwapchainTexture(commands, _window.Handle, &swapchain, &width, &height) || swapchain == null))
         {
@@ -854,7 +881,17 @@ public sealed unsafe partial class Renderer : IDisposable
         }
 
         var wait = Stopwatch.GetElapsedTime(waitStart);
-        EnsureTargets(shown ? Scaled(width) : width, shown ? Scaled(height) : height);
+        // The swapchain's command buffer presents when submitted: on Direct3D 12, where the draws may
+        // submit theirs mid-frame (Reserve), they get their own, and the swapchain's only blits at the end.
+        var presenting = commands;
+        if (swapchain != null && HeapBound)
+        {
+            commands = SDL_AcquireGPUCommandBuffer(_device);
+        }
+
+        _presenting = swapchain != null ? presenting : null;
+        var percent = PercentFor(width, height);
+        EnsureTargets(shown ? Scaled(width, percent) : width, shown ? Scaled(height, percent) : height);
         QueueCanvas();
         QueueStream();
         UploadDynamic(commands);
@@ -876,9 +913,19 @@ public sealed unsafe partial class Renderer : IDisposable
             RenderScene(ref commands, view, clearColour);
         }
 
+        // The insets belong to the frame, not to one eye: both eyes draw them (their views offset
+        // per eye), so they're cleared only once the frame is drawn.
+        ClearInsets();
         ApplyGamma(commands);
         if (swapchain != null)
         {
+            // The draws first, then the swapchain's blit and present.
+            if (commands != presenting)
+            {
+                SDL_SubmitGPUCommandBuffer(commands);
+                commands = presenting;
+            }
+
             Blit(commands, swapchain, width, height);
         }
 
@@ -893,6 +940,7 @@ public sealed unsafe partial class Renderer : IDisposable
 
         Stats = new RenderStats(_drawCalls, _triangles, (float)wait.TotalMilliseconds);
         _commands.Clear();
+        Band = DepthBand.Front;
     }
 
     /// <summary>How <see cref="Present"/> meets the GPU.</summary>
@@ -961,16 +1009,40 @@ public sealed unsafe partial class Renderer : IDisposable
     }
 
     /// <summary>The render scales (%): the frame is drawn at this share of the window's size, then
-    /// stretched to it (below 100: faster, blurrier; above: supersampled).</summary>
-    public static readonly int[] Scales = [50, 100, 150, 200];
+    /// stretched to it (below 100: faster, blurrier; above: supersampled); Auto picks one by the
+    /// window's pixels (<see cref="AutoPercent"/>).</summary>
+    public static readonly int[] Scales = [AutoScale, 50, 100, 150, 200];
     public const int FullScale = 100;
+    public const int AutoScale = 0;
+    /// <summary>Auto's frame: about a 1920 x 1080's pixels, at least half the window's sides.</summary>
+    private const float AutoPixels = 1920f * 1080f;
+    private const int MinAutoScale = 50;
     /// <summary>The largest texture side every backend takes.</summary>
     private const uint MaxTargetSide = 16384;
 
     /// <summary>The render scale (%) of a shown window; a hidden one draws <see cref="HiddenSize"/>.</summary>
     public int RenderScale { get; set; } = FullScale;
 
-    private uint Scaled(uint side) => Math.Clamp(side * (uint)RenderScale / FullScale, 1u, MaxTargetSide);
+    private uint Scaled(uint side, int percent) => Math.Clamp(side * (uint)percent / FullScale, 1u, MaxTargetSide);
+
+    /// <summary>The render scale (%) Auto picks for a window: its frame about 1080p's pixels, never
+    /// above the window's own nor below half its sides.
+    /// <code>
+    ///   2880 x 1800 tablet: √(2.07 MP / 5.18 MP) = 63 %   2400 x 1080 phone: 89 %   1920 x 1080: 100 %
+    /// </code></summary>
+    public static int AutoPercent(uint width, uint height)
+    {
+        var pixels = (float)width * height;
+        if (pixels <= 0f)
+        {
+            return FullScale;
+        }
+
+        return Math.Clamp((int)(FullScale * MathF.Sqrt(AutoPixels / pixels)), MinAutoScale, FullScale);
+    }
+
+    /// <summary>The render scale (%) for a window of this size.</summary>
+    private int PercentFor(uint width, uint height) => RenderScale == AutoScale ? AutoPercent(width, height) : RenderScale;
 
     /// <summary>The present mode in use (SDL starts with VSync).</summary>
     private VSync _vsync = VSync.On;
@@ -1022,6 +1094,9 @@ public sealed unsafe partial class Renderer : IDisposable
 
     /// <summary>The frame size of a hidden window (--size; tests, videos).</summary>
     public Resolution HiddenSize { get; set; } = DefaultHiddenSize;
+
+    /// <summary>A hidden window's frames through its swapchain too (--swapchain; tests).</summary>
+    public HiddenFrames HiddenFrames { get; set; }
 
     /// <summary>The cameras' and the canvas' aspect: the frame's, or an eye's half in full side by side.</summary>
     public float AspectRatio => StereoModes.EyeAspect(StereoMode, _targetHeight == 0 ? 4f / 3f : (float)_targetWidth / _targetHeight);
@@ -1103,9 +1178,28 @@ public sealed unsafe partial class Renderer : IDisposable
             if (command.Material.Pass == order)
             {
                 Reserve(ref commands, ref pass);
+                UseBand(pass, command.Band);
                 DrawOne(commands, pass, command, view);
             }
         }
+    }
+
+    /// <summary>The open pass's depth band (null: the whole range, as a pass begins).</summary>
+    private DepthBand? _band;
+
+    /// <summary>Depth tested within <paramref name="band"/>'s range: the viewport's area kept (the
+    /// frame's, or an inset's).</summary>
+    private void UseBand(SDL_GPURenderPass* pass, DepthBand band)
+    {
+        if (_band == band)
+        {
+            return;
+        }
+
+        var viewport = _openPass.Clipped ? _openPass.Viewport : new SDL_GPUViewport { w = _targetWidth, h = _targetHeight };
+        (viewport.min_depth, viewport.max_depth) = DepthBands.Of(band);
+        SDL_SetGPUViewport(pass, &viewport);
+        _band = band;
     }
 
     private void DrawOne(SDL_GPUCommandBuffer* commands, SDL_GPURenderPass* pass, in DrawCommand command, View view)
