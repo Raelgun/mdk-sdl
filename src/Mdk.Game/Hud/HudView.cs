@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Numerics;
 using Mdk.Engine.Render;
 using Mdk.Formats;
+using Mdk.Game.HdTextures;
 using Mdk.Game.Mods;
 
 namespace Mdk.Game.Hud;
@@ -19,7 +20,8 @@ public readonly record struct HudState(
     int SuperChainGun,
     int BarHealth,
     int BarMax,
-    BomberSight? Bomber = null);
+    BomberSight? Bomber = null,
+    float TimeLeft = 1f);
 
 /// <summary>The in-game HUD, drawn like the original (0x41e128) on the 360-high canvas: the health
 /// in the <c>SC_STAT</c> panel (bottom right, <c>SNIP_TXT</c> digits, blinking at 20 or less,
@@ -65,6 +67,7 @@ public sealed class HudView
     private readonly Renderer _renderer;
     private readonly int _palette;
     private readonly Palette _colours;
+    private Palette? _arenaColours;
     private readonly ModImages? _mods;
     private readonly Image _panel;
     private readonly Image _skull;
@@ -73,6 +76,16 @@ public sealed class HudView
     private readonly Vector4 _barFill;
     private readonly Vector4 _barFrame;
     private int _blink;
+    // The mission timer: the panel's indices with the time gone stamped in, up to this angle.
+    private readonly Texture _fullPanel;
+    private readonly Texture _emptyPanel;
+    private readonly byte[] _timerPanel;
+    private float _timerAngle;
+    // A mod's panel (RGBA, any size): the stamped pixels take SC_BSTAT's colours over it.
+    private readonly HdImage? _modPanel;
+    private readonly byte[] _modTimerPanel;
+    /// <summary>The ring is stamped again once the time gone moved this far (0x420830: a degree).</summary>
+    private const float TimerStep = MathF.PI / 180f;
 
     public Messages Messages { get; }
     /// <summary>Sniper mode's screen, which replaces the HUD while it shows.</summary>
@@ -87,6 +100,11 @@ public sealed class HudView
         _colours = palette;
         _mods = mods;
         _panel = Load(Panel, sprites.GetImage(Panel), 0, 0);
+        _fullPanel = sprites.GetImage(Panel);
+        _emptyPanel = sprites.GetImage(EmptyPanel);
+        _timerPanel = (byte[])_fullPanel.Indices.Clone();
+        _modPanel = mods?.Image(Panel, _fullPanel, palette);
+        _modTimerPanel = _modPanel is { } mod ? (byte[])mod.Rgba.Clone() : [];
         _skull = Load(Skull, sprites.GetImage(Skull), 0, 0);
         _digits = Load(Digits, sprites.GetImage(Digits), 0, 0);
         var pickups = sprites.GetAnimation(Pickups);
@@ -134,12 +152,26 @@ public sealed class HudView
     }
 
     private const string Panel = "SC_STAT";
+    private const string EmptyPanel = "SC_BSTAT";
     private const string Skull = "SKULL";
     private const string Digits = "SNIP_TXT";
     private const string Pickups = "PICKUPS";
 
     private static Vector4 Colour(Palette palette, int index) =>
         new Vector4(palette.Rgba[index * 4], palette.Rgba[index * 4 + 1], palette.Rgba[index * 4 + 2], byte.MaxValue) / byte.MaxValue;
+
+    /// <summary>Kurt's arena's palette: the HUD's sprites take its colours (0x4709d8 sets them in the
+    /// table 0x581c28 they're drawn through), as the dog's icon needs (its 64-175 are magenta in the DTI).</summary>
+    public void Enter(Palette arena)
+    {
+        if (arena == _arenaColours)
+        {
+            return;
+        }
+
+        _arenaColours = arena;
+        _renderer.UpdateTexture(_palette, Palette.Size, 1, arena.Rgba);
+    }
 
     /// <summary>Once a tick: the blink.</summary>
     public void Tick(HudState state)
@@ -169,6 +201,7 @@ public sealed class HudView
 
         // Health panel at the bottom right; the number blinks when health is low.
         var panel = new Vector2(width - (_panel.Size.X + PanelRight), height - (_panel.Size.Y + PanelBottom));
+        UpdateTimer(state.TimeLeft);
         DrawImage(_panel, panel, Vector4.One);
         if (state.Health > LowHealth || _blink < BlinkOn)
         {
@@ -202,6 +235,60 @@ public sealed class HudView
         {
             _renderer.FillRect(new RectangleF(0f, 0f, width, height), new Vector4(1f, 1f, 1f, MathF.Min(state.WhiteFlash / FlashMax, 1f)));
         }
+    }
+
+    /// <summary>The mission timer's ring empties as the time runs out (0x420830): the time gone is
+    /// stamped in once it moved a degree. Less gone than stamped (a game loaded): the full ring again.</summary>
+    private void UpdateTimer(float timeLeft)
+    {
+        var angle = (1f - timeLeft) * MathF.Tau;
+        if (angle < _timerAngle)
+        {
+            _fullPanel.Indices.CopyTo(_timerPanel, 0);
+            _timerAngle = 0f;
+            UploadTimer();
+        }
+
+        if (angle <= _timerAngle + TimerStep)
+        {
+            return;
+        }
+
+        TimerRing.Wipe(_timerPanel, _emptyPanel, _timerAngle, angle);
+        _timerAngle = angle;
+        UploadTimer();
+    }
+
+    /// <summary>The stamped panel to the GPU, and over a mod's panel: each of its pixels shows the
+    /// panel pixel it covers, SC_BSTAT's colour where the ring was stamped.</summary>
+    private void UploadTimer()
+    {
+        var width = _fullPanel.Width;
+        var height = _fullPanel.Height;
+        _renderer.UpdateTexture(_panel.Texture, width, height, _timerPanel);
+        if (_modPanel is not { } mod)
+        {
+            return;
+        }
+
+        for (var y = 0; y < mod.Height; y++)
+        {
+            var row = y * height / mod.Height * width;
+            for (var x = 0; x < mod.Width; x++)
+            {
+                var at = row + x * width / mod.Width;
+                var pixel = (y * mod.Width + x) * 4;
+                if (_timerPanel[at] == _fullPanel.Indices[at])
+                {
+                    Array.Copy(mod.Rgba, pixel, _modTimerPanel, pixel, 4);
+                    continue;
+                }
+
+                Array.Copy((_arenaColours ?? _colours).Rgba, _timerPanel[at] * 4, _modTimerPanel, pixel, 4);
+            }
+        }
+
+        _renderer.ReplaceImage(_panel.Texture, _palette, mod.Width, mod.Height, _modTimerPanel);
     }
 
     private void DrawImage(Image image, Vector2 at, Vector4 tint) =>

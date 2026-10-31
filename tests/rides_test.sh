@@ -49,6 +49,30 @@ echo "$OUT" | grep "^Kurt at"
 echo "$OUT" | grep -q "^riding XSNOWB"; check "rides the snowboard" $?
 awk "BEGIN { exit !($(kurt "$OUT" 2) > 4500) }"; check "breaks through the ice wall" $?
 
+# Uphill out of a bend of CMEAT_3 the board dips under the floor; the original draws an object
+# after the floor it stands on: its white shows under Kurt (bright pixels of the lower middle).
+run --level=4 --delay=0.5 --teleport=CMEAT_3,420,4285,-570 --wait=9 --size=640x480 > /dev/null
+BOARD=$(tail -c +55 "$SHOT" | od -An -v -tu1 | tr -s ' ' '
+' | grep -v '^$' |
+	awk '{ c = (NR - 1) % 4; if (c == 0) { m = $1 } else if (c < 3) { if ($1 < m) m = $1 } else {
+		p = int((NR - 1) / 4); x = p % 640; y = int(p / 640)
+		if (m > 170 && x >= 240 && x < 400 && y >= 240) n++ } } END { print n + 0 }')
+echo "  board pixels: $BOARD"
+[ "$BOARD" -ge 200 ]; check "the board over the floor" $?
+
+# The ride's end in CMEAT_1: MEAT_3's shell lies above the tube's floor; the original draws the
+# camera's arena over the other one, so Kurt shows whole (his dark legs in the lower middle).
+for LOOK in --original --enhanced; do
+	run --level=4 --delay=0.5 --teleport=CMEAT_1,62.35,2582.81,-392.90 --wait=2 --size=640x480 $LOOK > /dev/null
+	LEGS=$(tail -c +55 "$SHOT" | od -An -v -tu1 | tr -s ' ' '
+' | grep -v '^$' |
+		awk '{ c = (NR - 1) % 4; if (c == 0) { m = $1 } else if (c < 3) { if ($1 > m) m = $1 } else {
+			p = int((NR - 1) / 4); x = p % 640; y = int(p / 640)
+			if (m < 40 && x >= 290 && x < 370 && y >= 340 && y < 440) n++ } } END { print n + 0 }')
+	echo "  Kurt's legs ($LOOK): $LEGS"
+	[ "$LEGS" -ge 1000 ]; check "the tube over the shell ($LOOK)" $?
+done
+
 OUT=$(run --level=7 --delay=0.5 --teleport=DANT_5,100,2320,-60 --bomber=drop --wait=13.5)
 echo "$OUT" | grep "XBN_BOMB" | head -1
 echo "$OUT" | grep -q "^riding XE"; check "rides the XE" $?

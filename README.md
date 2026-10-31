@@ -38,7 +38,7 @@ original's box sweeps.
   from your copy of the game, into a mod (Options, Mods switches it). Nothing upscaled is
   distributed. [Details](#hd-textures).
 - **Modding**: replace textures, the HUD and menus' images, fonts and models (glTF) in the
-  enhanced look; `--export-assets` writes the originals to start from. [docs/modding.md](docs/modding.md).
+  enhanced look, from mod folders or zips; `--export-assets` writes the originals to start from. [docs/modding.md](docs/modding.md).
 - **Enhanced look (optional)**: filtered textures, each level lit from its sky (sun and shadows
   outdoors), dynamic lights of muzzle flashes, explosions and fires, ambient occlusion, glow, haze,
   anti-aliasing. The original look stays pixel-exact.
@@ -219,7 +219,7 @@ mdk_sdl.exe
 - `--upscale-textures[=3,7]`: make the enhanced look's HD textures, then quit ([below](#hd-textures)).
 - `--export-assets=dir`: write the game's textures, 2D images (PNG) and models (glTF .glb) into
   `dir` for modding, then quit ([docs/modding.md](docs/modding.md)).
-- `--mod=a,b`: only these mods (folders of `mods/`) for this run (not saved).
+- `--mod=a,b`: only these mods (folders or zips of `mods/`, by name) for this run (not saved).
 - `--bloodyes`, `--nobloodno`: gore on or off instead of the settings' (not saved; the original's
   `-bloodyes`, `-nobloodno`).
 - `--gpu=d3d12|vulkan|metal|auto`: the GPU backend instead of the settings' (not saved).
@@ -270,8 +270,10 @@ From the main menu or the pause menu; a page per kind, each change applied and s
 - **Audio**: master, music and effects volumes, the music filter.
 - **Keyboard & mouse**: mouse sensitivity and inversion, key bindings.
 - **Gamepad**: look sensitivity and inversion, button bindings (Start stays pause; a key cancels).
-  On Android also the touch controls: Auto (hidden while a gamepad, keyboard or mouse plays; a
-  touch brings them back), Off or On.
+- **Touch** (a touch screen only): the touch controls: Auto (hidden while a gamepad, keyboard or mouse plays; a
+  touch brings them back), Off or On; their opacity; "Edit touch layout": drag a control to
+  move it, its corner handle or - / + to resize it (overlaps show red, Done keeps them), Reset,
+  Done or Cancel (asking first when something changed); the tools move away from a dragged control.
 - **Game**: difficulty.
 - **Mods**: each mod on or off, "Make HD textures" (desktop), "Import from folder" (Android).
 
@@ -296,7 +298,7 @@ Enter or E to use the item, Tab, [ ] or the mouse wheel to select it (or 1-5), t
 (the mouse wheel or PageUp/PageDown zoom, Tab or [ ] select the ammo), F1 for the flying camera (E/Q to go up and
 down), F2 for a quick save (the original's full save: the name is asked, the level's number
 offered), F9 for a quick load (this session's last F2 save, else the newest save; "Nothing to
-load" if none), F3 for the debug overlay, the key left of 1 for the console, F12 for a screenshot, Esc for the pause menu (resume, options, main menu, quit; it names the quick keys). Saving
+load" if none), F3 for the debug overlay, the key left of 1 for the console, F12 for a screenshot, Esc for the pause menu (resume, quick save, quick load (greyed out with no save), options, main menu, quit; it names the quick keys). Saving
 and loading show "Game saved", "Game loaded" or "Can't save now" (sniper mode, rides) on the HUD;
 outside a level the quick keys do nothing. The bindings
 can be changed in Options, Controls (to any key, mouse button or wheel direction). In the menus: the arrows or the mouse, Enter or a click, Esc
@@ -397,26 +399,33 @@ city needs T + 4 to reach the top of `ARENA_4`); the sniper key puts the helmet 
 1.0+ GPU (arm64; x64 for emulators); depth clamping and clip distances, which some (Mali-G52)
 lack, aren't needed. Install it by allowing installs from unknown sources. The game files
 aren't in it: copy your MDK folder (the one with `TRAVERSE`, `MISC`, `FALL3D`, `STREAM`) to the
-phone, e.g. into `Download/MDK`. On first start the app asks for that folder (Android's folder
-picker; `Download` itself can't be picked, a folder in it can) and copies its game files (about
-170 MB) into its own folder, `Android/data/io.github.nemo22.mdk/files/mdk`, once. Settings and
-saves live next to it, in `files`.
+phone, e.g. into `MDK` on the internal storage. On first start the app asks for All files
+access: allowed, you pick that folder (Android's folder picker) and the game plays from it in
+place, its settings, saves, mods and `mdk.log` there; if the folder goes or the access is
+switched off, the app says so and asks again. Declined (or a store build, `-p:StoreBuild=true`),
+it copies the folder's game files (about 170 MB) into its own folder,
+`Android/data/io.github.nemo22.mdk/files/mdk`, once (`Download` itself can't be picked, a folder
+in it can); settings and saves live next to it, in `files`. An app that copied before keeps its
+copy; Options, Mods, "Import from folder" can switch it to the folder in place (settings and
+saves copied there, from the next start).
 
 Mods and HD textures: make them on a PC ([above](#hd-textures)), copy the `mods` folder (next to
-`mdk_sdl.exe`) into the phone's MDK folder, then Options, Mods, "Import from folder" and pick it again: new
-or changed files are copied, `mods` too (an older `textures-hd` becomes the HD textures mod).
+`mdk_sdl.exe`) into the phone's MDK folder; played in place, they're there; copied, Options,
+Mods, "Import from folder" and pick it again: new or changed files are copied, `mods` too (an
+older `textures-hd` becomes the HD textures mod).
 Options, Mods then switches them (enhanced look).
 
 Touch controls in play: the left part of the screen is a stick where the finger lands (walk,
 strafe; far pushes run), dragging elsewhere looks around, buttons on the right fire, jump, use
-the item, pick the next item, toggle sniper mode and zoom (+ / -), and pause (top right). Menus
+the item, pick the next item, toggle sniper mode and zoom (+ / -), and pause (top right); all of them, and the stick's zone, can be moved and resized. Menus
 take taps; Android's back button is Esc. A keyboard works as on the desktop.
 
 Not yet: typing save names (no on-screen keyboard), the console. Tested on the
 Android emulator and one phone.
 
 The APK is signed with a debug key until a release key is set: to update, uninstall the old one
-first (that deletes its copy of the game files and the saves; the first start imports again).
+first (that deletes its copy of the game files and the saves, not a folder played in place;
+the first start asks again).
 
 Building it needs the Android workload (`dotnet workload install android`), JDK 21 and the
 Android SDK's API 36 platform, and SPIR-V shaders (`-p:DxcSpirv=...`):

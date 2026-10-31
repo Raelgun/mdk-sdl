@@ -210,7 +210,7 @@ public sealed class FallView
         }
         else
         {
-            QueueGround(sim, camera, width);
+            QueueGround(sim, camera, width, ViewArea(width));
         }
 
         _renderer.UpdateMesh(_backMesh, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_back));
@@ -224,9 +224,26 @@ public sealed class FallView
         QueueTrails(sim);
 
         var view = Matrix4x4.CreateLookAt(camera, camera - Vector3.UnitZ, Vector3.UnitY);
-        var fieldOfView = 2f * MathF.Atan(ViewCentreY / Focal);
+        var fieldOfView = FieldOfView();
         var projection = Matrix4x4.CreatePerspectiveFieldOfView(fieldOfView, _renderer.AspectRatio, Near, Far);
         return new View(view * projection, Matrix4x4.Identity, camera, new ViewCamera(-Vector3.UnitZ, Vector3.UnitY, projection, Near));
+    }
+
+    /// <summary>The vertical field of view: the original's 360 pixels high at 4:3 and wider, taller
+    /// on a narrower screen to keep the width (<see cref="Kurt.CameraMath.KeepWidth"/>).</summary>
+    private float FieldOfView()
+    {
+        var fieldOfView = 2f * MathF.Atan(ViewCentreY / Focal);
+        var widened = Kurt.CameraMath.KeepWidth(float.RadiansToDegrees(fieldOfView), _renderer.AspectRatio);
+        return widened == float.RadiansToDegrees(fieldOfView) ? fieldOfView : float.DegreesToRadians(widened);
+    }
+
+    /// <summary>The view pixels the camera sees, centred on (<paramref name="width"/> / 2, 180): a
+    /// near-square foldable sees above and below the 360 rows too.</summary>
+    private RectangleF ViewArea(float width)
+    {
+        var half = new Vector2(_renderer.AspectRatio, 1f) * MathF.Tan(FieldOfView() / 2f) * Focal;
+        return new RectangleF(width / 2f - half.X, ViewCentreY - half.Y, 2f * half.X, 2f * half.Y);
     }
 
     /// <summary>The effects over everything: towards white in the intro, then darkened.</summary>
@@ -272,7 +289,7 @@ public sealed class FallView
     }
 
     /// <summary>The ground with the track, the haze over it, the minecrawler over both (fall.gd).</summary>
-    private void QueueGround(FallSim sim, Vector3 camera, float width)
+    private void QueueGround(FallSim sim, Vector3 camera, float width, RectangleF area)
     {
         var centreRow = FallGround.CentreRow(sim.Time);
         if (_ground.UpdateTrack(centreRow))
@@ -280,7 +297,7 @@ public sealed class FallView
             _renderer.UpdateTexture(_groundTexture, _ground.Width, FallGround.Size, _ground.Indices);
         }
 
-        var (screen, texels) = FallGround.Visible(camera, centreRow, width, _ground.Width);
+        var (screen, texels) = FallGround.Visible(camera, centreRow, area, _ground.Width);
         if (screen.Width > 0f)
         {
             var uv = new RectangleF(texels.X / _ground.Width, texels.Y / FallGround.Size, texels.Width / _ground.Width, texels.Height / FallGround.Size);
@@ -304,7 +321,7 @@ public sealed class FallView
             }
 
             var material = new Material(_haze[sim.HazeFrame], _whitePalette, new Vector4(1f, 1f, 1f, alpha), HazeLevels, Pass.Blended);
-            Quad(camera, width, new RectangleF(0f, 0f, width, ViewHeight), BackDepth - LayerStep, material, frame: b - 1);
+            Quad(camera, width, area, BackDepth - LayerStep, material, frame: b - 1);
         }
     }
 

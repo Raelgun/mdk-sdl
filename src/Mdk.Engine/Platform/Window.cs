@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Numerics;
 using SDL;
 using static SDL.SDL3;
@@ -30,6 +31,51 @@ public sealed unsafe class Window : IDisposable
 
     /// <summary>A touch screen (Android): the on-screen controls' setting applies.</summary>
     public bool HasTouchScreen => _touch != null;
+
+    /// <summary>A touch screen reads text only while asked (the console): its keyboard shows then.
+    /// Other windows always read it.</summary>
+    public void SetTyping(Typing typing)
+    {
+        if (_touch == null)
+        {
+            return;
+        }
+
+        _typing = typing;
+        if (typing == Typing.On)
+        {
+            StartTyping();
+            return;
+        }
+
+        SDL_StopTextInput(Handle);
+    }
+
+    /// <summary>The keyboard without corrections or capitals: commands and save names aren't words.</summary>
+    private void StartTyping()
+    {
+        var properties = SDL_CreateProperties();
+        SDL_SetBooleanProperty(properties, SDL_PROP_TEXTINPUT_AUTOCORRECT_BOOLEAN, false);
+        SDL_SetNumberProperty(properties, SDL_PROP_TEXTINPUT_CAPITALIZATION_NUMBER, (long)SDL_Capitalization.SDL_CAPITALIZE_NONE);
+        SDL_StartTextInputWithProperties(Handle, properties);
+        SDL_DestroyProperties(properties);
+    }
+
+    /// <summary>The text input asked for (<see cref="SetTyping"/>).</summary>
+    private Typing _typing;
+
+    /// <summary>Android's Back hides the keyboard first (SDL stops the text input): that's the
+    /// user's Back, not ours, so it presses Back (the console closes at once).</summary>
+    private void WatchKeyboard(Input input)
+    {
+        if (_typing == Typing.Off || SDL_TextInputActive(Handle))
+        {
+            return;
+        }
+
+        _typing = Typing.Off;
+        input.Press(MenuKey.Back);
+    }
 
     /// <summary>The gamepads (none in a hidden window: tests aren't steered by a pad left plugged in).</summary>
     private readonly Gamepads? _gamepads;
@@ -228,6 +274,26 @@ public sealed unsafe class Window : IDisposable
         }
     }
 
+    /// <summary>Window units per millimetre of the display the window is on (0: unknown).</summary>
+    public float UnitsPerMm => ScreenDensity.UnitsPerMm(SDL_GetWindowDisplayScale(Handle), SDL_GetWindowPixelDensity(Handle), ScreenDensity.BaseDpi);
+
+    /// <summary>The part of the window clear of cut-outs and rounded corners (window units); all
+    /// of it when SDL doesn't know.</summary>
+    public RectangleF SafeArea
+    {
+        get
+        {
+            SDL_Rect safe;
+            if (SDL_GetWindowSafeArea(Handle, &safe) && safe.w > 0 && safe.h > 0)
+            {
+                return new RectangleF(safe.x, safe.y, safe.w, safe.h);
+            }
+
+            var (width, height) = Size;
+            return new RectangleF(0f, 0f, width, height);
+        }
+    }
+
     /// <summary>The mouse cursor becomes an image (RGBA8, <paramref name="width"/> x
     /// <paramref name="height"/>) whose hotspot is (<paramref name="hotX"/>, <paramref name="hotY"/>).</summary>
     public void SetCursor(byte[] rgba, int width, int height, int hotX, int hotY)
@@ -276,16 +342,23 @@ public sealed unsafe class Window : IDisposable
     /// <summary>When the on-screen controls show (<see cref="TouchButtons"/>).</summary>
     public void ShowTouch(TouchButtons mode) => _touchMode = mode;
 
+    /// <summary>Where the player put the on-screen controls (<see cref="TouchLayout"/>), and their opacity (0-1).</summary>
+    public void ArrangeTouch(IReadOnlyDictionary<TouchPart, TouchPlace> places, float opacity) => _touch?.Arrange(places, opacity);
+
     /// <summary>Handles pending events. Returns false when the window closes.</summary>
     public bool PumpEvents(Input input)
     {
         input.BeginFrame();
+        WatchKeyboard(input);
 
         // Out of play, touches are clicks (SDL makes mouse events of them).
         if (_capture == Capture.Off)
         {
             _touch?.Release(input);
         }
+
+        // The controls' physical size, on whichever display the window is.
+        _touch?.Measure(UnitsPerMm, SafeArea);
 
         SDL_Event e;
         while (SDL_PollEvent(&e))
@@ -426,6 +499,9 @@ public sealed unsafe class Window : IDisposable
 }
 
 public enum Capture { Off, On }
+
+/// <summary>Whether typed text is read (on a touch screen: the on-screen keyboard shows).</summary>
+public enum Typing { Off, On }
 
 public enum Visibility { Shown, Hidden }
 

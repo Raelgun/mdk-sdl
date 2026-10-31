@@ -53,6 +53,8 @@ public sealed record GameOptions(Start Start, ViewerOptions Level)
     public float? StereoConvergence { get; init; }
     /// <summary>The display's gamma instead of the settings' (--gamma; tests).</summary>
     public float? Gamma { get; init; }
+    /// <summary>The enhanced look's cost instead of the OS's (--quality; tests, measurements).</summary>
+    public EffectQuality? Quality { get; init; }
     /// <summary>Keys pressed once at given times (--press; tests).</summary>
     public TestPresses? Presses { get; init; }
     /// <summary>Only these mods on, by folder (--mod; tests; saved only if the options change).</summary>
@@ -64,6 +66,8 @@ public sealed record GameOptions(Start Start, ViewerOptions Level)
     public string? Gpu { get; init; }
     /// <summary>A hidden window's frame size instead of 1280 x 960 (--size; tests, videos).</summary>
     public Resolution? HiddenSize { get; init; }
+    /// <summary>A hidden window's frames through its swapchain too (--swapchain; tests).</summary>
+    public HiddenFrames HiddenFrames { get; init; }
     /// <summary>The sound mixed from the start saved as this WAV (--record-audio; with --mute, in step with --frames).</summary>
     public string? RecordAudio { get; init; }
     /// <summary>The platform's import of the game files again (Android: the folder picked again,
@@ -86,6 +90,7 @@ public sealed class Game : IDisposable
     private const string SavesFolder = "saves";
     /// <summary>Overrides the user folder (settings and saves), for tests.</summary>
     private const string UserFolderVariable = "MDK_USER_DIR";
+    private const string LogFile = "mdk.log";
     private const int TownShift = 29;
     /// <summary>The soak test's frames are this many game steps (0.1 s): it runs faster.</summary>
     private const int SoakSteps = 6;
@@ -105,6 +110,11 @@ public sealed class Game : IDisposable
     private readonly Renderer.Scope _scope;
     /// <summary>The console and the overlay, over every screen.</summary>
     private readonly DevUi _dev;
+    private Typing _typing;
+    /// <summary>The console as last seen: opening it shows a touch screen's keyboard, closing hides it.</summary>
+    private ConsoleState _consoleSeen;
+    /// <summary>The screen's typing as last seen (a save's name prompt).</summary>
+    private Typing _screenSeen;
     private readonly GameCommands _commands;
     /// <summary>The soak test's random keys, on every screen; menu keys too when it starts in the
     /// menus or the flow screens.</summary>
@@ -168,6 +178,7 @@ public sealed class Game : IDisposable
 
         _screenInfo = now;
         Console.WriteLine(TechInfo.Display(now));
+        Console.WriteLine(TechInfo.Layout(_window.UnitsPerMm, _window.SafeArea, _renderer.RenderScale, now.Window, _renderer.Quality));
         _devView.System = TechInfo.Overlay(_renderer.Gpu, now);
     }
 
@@ -189,6 +200,7 @@ public sealed class Game : IDisposable
     {
         _options = options;
         var folder = Environment.GetEnvironmentVariable(UserFolderVariable) ?? UserFolder();
+        WriteLog(folder);
         _saves = SaveGames.In(folder);
 
         // The original deletes LASTGAME.SAV when it quits.
@@ -202,6 +214,8 @@ public sealed class Game : IDisposable
         {
             _renderer.HiddenSize = hiddenSize;
         }
+
+        _renderer.HiddenFrames = options.HiddenFrames;
 
         _audio = new AudioDevice(options.Level.Sound == SoundMode.Muted ? Output.Muted : Output.Speakers);
         if (options.RecordAudio is { } recording)
@@ -240,6 +254,11 @@ public sealed class Game : IDisposable
             settings.Gamma = gamma;
         }
 
+        if (options.Quality is { } quality)
+        {
+            _renderer.Quality = quality;
+        }
+
         settings.Apply(_audio, _window, _renderer, _input);
         // Older builds' HD textures become the HD textures mod.
         if (HdGenerator.Migrate(folder) is > 0 and var moved)
@@ -247,7 +266,7 @@ public sealed class Game : IDisposable
             Console.WriteLine($"HD textures: {moved} images moved into mods/{HdGenerator.ModFolder}");
         }
 
-        _ui = new Ui(data, _window, _renderer, _audio, _input, settings, folder) { Import = options.Import };
+        _ui = new Ui(data, _window, _renderer, _audio, _input, settings, folder) { Import = options.Import, TouchEditor = options.Page == MenuPage.TouchLayout };
         if (options.Mods is { } mods)
         {
             UseOnly(mods);
@@ -260,6 +279,7 @@ public sealed class Game : IDisposable
         _dev = new DevUi(new DevConsole(registry, _ui.Dev.History, _ui.Dev.Log, Console.WriteLine), () => _ui.Dev.ToggleOverlay());
         var small = new Fonts(_renderer, _ui.Fti, mods: _ui.CanvasMods()).Small;
         var devView = _devView = new DevUiView(_renderer, small);
+        devView.Console.CloseButton = _window.HasTouchScreen ? CloseButton.Shown : CloseButton.Hidden;
         // The on-screen controls of a touch screen (Android), under the developer tools.
         var touchView = new TouchView(_renderer, small);
         // Made once: a lambda made in the overlay's would be made every frame.
@@ -311,7 +331,10 @@ public sealed class Game : IDisposable
             _options.Presses?.Apply(_input, time);
 
             // The open console has the keys: the screen runs on without them.
+            OpenAskedConsole();
+            TouchConsole();
             _dev.Update(_input, elapsed);
+            UpdateTyping();
             if (_screen is not Viewer { ConsoleReady: false })
             {
                 _dev.RunOnce(_options.Level.Console);
@@ -476,13 +499,14 @@ public sealed class Game : IDisposable
     /// <summary>The loading screen, then the level.</summary>
     private void Play()
     {
+        // The loading screen stays (freed with the level) to show how far the level got.
         Show(() => null);
-        LoadingScreen.Show(_ui, _state.Level, 0f);
-        Show(() => null);
+        var screen = new LoadingScreen(_ui, _state.Level);
+        screen.Show(0f);
         var test = _firstLevel ? _options.Level : new ViewerOptions(0, null, null, 0f, _options.Level.Sound);
         _levelShot = _firstLevel && _options.Start == Start.Level && test.Screenshot != null;
         var loading = Stopwatch.StartNew();
-        _viewer = new Viewer(_ui, test with { Level = _state.Level }, _state);
+        _viewer = new Viewer(_ui, test with { Level = _state.Level }, _state, new LoadProgress(screen.Show));
         _perf?.Loaded(loading.Elapsed);
         _screen = _viewer;
         if (_firstLevel && _options.Save is { } name && _saves.Write(name, _state.Save(SaveKind.LevelStart)))
@@ -660,8 +684,93 @@ public sealed class Game : IDisposable
         return folder;
     }
 
+    /// <summary>The console a menu asked for opens (the game's options; phones have no Grave key).</summary>
+    private void OpenAskedConsole()
+    {
+        if (!_ui.Dev.ConsoleAsked)
+        {
+            return;
+        }
+
+        _ui.Dev.ConsoleAsked = false;
+        if (_dev.Console.State == ConsoleState.Closed)
+        {
+            _dev.Console.Toggle();
+        }
+    }
+
+    /// <summary>A touch screen's keyboard shows when the console or a screen's name prompt opens and
+    /// hides when both are closed.</summary>
+    private void UpdateTyping()
+    {
+        var state = _dev.Console.State;
+        var screen = _screen?.Typing ?? Typing.Off;
+        if (state == _consoleSeen && screen == _screenSeen)
+        {
+            return;
+        }
+
+        _consoleSeen = state;
+        _screenSeen = screen;
+        SetTyping(state == ConsoleState.Open || screen == Typing.On ? Typing.On : Typing.Off);
+    }
+
+    /// <summary>Shows or hides a touch screen's keyboard.</summary>
+    private void SetTyping(Typing typing)
+    {
+        if (typing == _typing)
+        {
+            return;
+        }
+
+        _typing = typing;
+        _window.SetTyping(typing);
+    }
+
+    /// <summary>A touch screen's tap on the open console: its close button or the game below close
+    /// it (the tap goes no further), its line shows the keyboard, its log hides it.</summary>
+    private void TouchConsole()
+    {
+        if (!_window.HasTouchScreen || _dev.Console.State != ConsoleState.Open || !_input.WasClicked(Pointer.Left))
+        {
+            return;
+        }
+
+        var point = _renderer.CanvasPoint(_input.PointerX, _input.PointerY);
+        switch (_devView.Console.Spot(_dev.Console, point))
+        {
+            case ConsoleSpot.Close:
+            case ConsoleSpot.Below:
+                _dev.Console.Press(EditKey.Close);
+                _input.Withhold();
+                break;
+            case ConsoleSpot.Line:
+                SetTyping(Typing.On);
+                break;
+            case ConsoleSpot.Log:
+                SetTyping(Typing.Off);
+                break;
+        }
+    }
+
+    /// <summary>The output also goes to mdk.log in the user folder (phones have no console to read):
+    /// made anew each start. A folder it can't write to keeps the output on screen only.</summary>
+    private static void WriteLog(string folder)
+    {
+        try
+        {
+            Directory.CreateDirectory(folder);
+            Log.Capture(Log.Lines).WriteTo(Path.Combine(folder, LogFile));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"No log file in {folder}: {e.Message}");
+        }
+    }
+
     public void Dispose()
     {
+        Log.Capture(Log.Lines).Close();
         _screen?.Dispose();
         _audio.Dispose();
         _renderer.Dispose();
@@ -684,6 +793,8 @@ public sealed class SavePromptScreen(Ui ui, SaveGames saves, SaveGame save, stri
     }
 
     public IReadOnlyList<string> Status => ["save prompt"];
+
+    public Typing Typing => _prompt.Typing;
 
     public void Dispose()
     {

@@ -200,6 +200,8 @@ public sealed class Input
     private readonly HashSet<MenuKey> _menuDown = [];
     private readonly HashSet<RawKey> _rawPressed = [];
     private readonly HashSet<Pointer> _clicked = [];
+    /// <summary>The pointer's buttons held (a finger on a touch screen's menus: the left).</summary>
+    private readonly HashSet<Pointer> _pointers = [];
 
     private readonly HashSet<Key> _down = [];
     /// <summary>Keys held by mouse buttons, apart from the keyboard's.</summary>
@@ -251,8 +253,10 @@ public sealed class Input
     public float PointerY { get; private set; }
     /// <summary>The pointer moved this frame.</summary>
     public bool PointerMoved { get; private set; }
-    /// <summary>Text typed this frame.</summary>
+    /// <summary>Text typed this frame, with an <see cref="Erase"/> for each Backspace where it came: a
+    /// phone keyboard's correction of "fps" to "gps" is "\b\b\bgps" in one frame.</summary>
     public string Typed { get; private set; } = "";
+    public const char Erase = '\b';
     /// <summary>Any key or mouse button was pressed this frame.</summary>
     public bool AnyPressed { get; private set; }
     /// <summary>The name of the key or mouse button pressed this frame (for <see cref="Bind"/>), or "".</summary>
@@ -319,6 +323,8 @@ public sealed class Input
     public bool WasPressed(RawKey key) => _rawPressed.Contains(key);
 
     public bool WasClicked(Pointer button) => _clicked.Contains(button);
+
+    public bool IsDown(Pointer button) => _pointers.Contains(button);
 
     internal void BeginFrame()
     {
@@ -567,6 +573,7 @@ public sealed class Input
         _buttons.Clear();
         _heldKeys.Clear();
         _heldButtons.Clear();
+        _pointers.Clear();
         _fly.Clear();
         _menuDown.Clear();
         _pad.Clear();
@@ -592,6 +599,11 @@ public sealed class Input
         if (state == State.Down && RawKeys.TryGetValue(scancode, out var rawKey))
         {
             _rawPressed.Add(rawKey);
+        }
+
+        if (state == State.Down && scancode == SDL_Scancode.SDL_SCANCODE_BACKSPACE)
+        {
+            Typed += Erase;
         }
 
         if (state == State.Down && repeat == Repeat.No)
@@ -638,6 +650,7 @@ public sealed class Input
     /// <summary>A mouse button: see <see cref="DefaultButtons"/>.</summary>
     internal void SetButton(MouseButton button, State state)
     {
+        HoldPointer(button, state);
         if (state == State.Down)
         {
             AnyPressed = true;
@@ -815,6 +828,24 @@ public sealed class Input
         {
             Press(key);
         }
+    }
+
+    /// <summary>The left or right button held or let go (<see cref="IsDown(Pointer)"/>).</summary>
+    private void HoldPointer(MouseButton button, State state)
+    {
+        Pointer? pointer = button == MouseButton.Left ? Pointer.Left : button == MouseButton.Right ? Pointer.Right : null;
+        if (pointer is not { } held)
+        {
+            return;
+        }
+
+        if (state == State.Down)
+        {
+            _pointers.Add(held);
+            return;
+        }
+
+        _pointers.Remove(held);
     }
 
     private void AddClick(MouseButton button)
