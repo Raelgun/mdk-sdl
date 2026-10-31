@@ -24,8 +24,9 @@ public sealed class FollowCamera(ArenaSpace? space = null)
     /// <summary>The mouse's look stops at this pitch (the original's keys: −60° to 90°, back to 0 once
     /// let go). Further down Kurt's sprite lies flat under the camera and floors ahead hide it;
     /// further up the camera sinks to his feet, through the floor on a slope.</summary>
-    private const float LookUpLimit = -30f;
-    private const float LookDownLimit = 60f;
+    // Personal tweak: the original's range (−60° to 90°) instead of −30° to 60°, as before 1.2.3.
+    private const float LookUpLimit = -60f;
+    private const float LookDownLimit = 90f;
     /// <summary>The view's pitch stays short of straight up or down: past it the view turns over.</summary>
     private const float ViewPitchLimit = 89f;
     private const float AirPitchRate = 0.667f * Kurt.Ticks;

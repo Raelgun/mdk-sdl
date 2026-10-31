@@ -19,10 +19,10 @@ public class CameraTests
     private const float FullLook = 1000f;
     /// <summary>The view's least share along Kurt's facing: about 1° short of straight down.</summary>
     private const float MinAhead = 0.01f;
-    /// <summary>The mouse's look stops here: further down Kurt's sprite lies flat under the camera,
-    /// further up the camera sinks towards his feet.</summary>
-    private const float LookDownLimit = 60f;
-    private const float LookUpLimit = -30f;
+    /// <summary>The mouse's look stops here. Personal tweak: the original's −60° to 90°, the view
+    /// stopping 1° short of straight down (FollowCamera.ViewPitchLimit).</summary>
+    private const float LookDownLimit = 89f;
+    private const float LookUpLimit = -60f;
 
     private static readonly AudioDevice Device = new(Output.Muted);
 
