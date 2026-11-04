@@ -159,6 +159,40 @@ public class InputTests
     }
 
     [Fact]
+    public void OnlyStartPausesFromTheGamepad()
+    {
+        // B goes back in the menus; in play it is only its binding (Run), or nothing.
+        var input = NewInput();
+        input.SetPadButton(PadButton.East, Input.State.Down);
+        Assert.True(input.WasPressed(MenuKey.Back));
+        Assert.True(input.IsDown(Key.Turbo));
+        Assert.False(input.PausePressed);
+
+        input.ClearPadBinding(Key.Turbo);
+        input.BeginFrame();
+        input.SetPadButton(PadButton.East, Input.State.Up);
+        input.SetPadButton(PadButton.East, Input.State.Down);
+        Assert.False(input.PausePressed);
+
+        // Start pauses, B held or not.
+        input.BeginFrame();
+        input.SetPadButton(PadButton.Start, Input.State.Down);
+        Assert.True(input.PausePressed);
+
+        input.BeginFrame();
+        Assert.False(input.PausePressed);
+    }
+
+    [Fact]
+    public void TheProgramsBackPauses()
+    {
+        // --press=Menu.Back and the on-screen pause button.
+        var input = NewInput();
+        input.Press(MenuKey.Back);
+        Assert.True(input.PausePressed);
+    }
+
+    [Fact]
     public void AddedPadButtonKeepsTheOthers()
     {
         // Personal tweak: the defaults stay beside it; the button leaves the action that had it.

@@ -89,7 +89,7 @@ public sealed class FallScreen : IScreen
             return Paused(elapsed, screenshot);
         }
 
-        if (input.WasPressed(MenuKey.Back))
+        if (input.PausePressed)
         {
             _pause.Show();
             _ui.Window.CaptureMouse(Capture.Off);

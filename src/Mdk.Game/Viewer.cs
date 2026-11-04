@@ -446,7 +446,7 @@ public sealed class Viewer : IScreen
             return paused == Event.None ? _next : paused;
         }
 
-        if (input.WasPressed(MenuKey.Back) && _scripts.Strike is not { Active: true })
+        if (input.PausePressed && _scripts.Strike is not { Active: true })
         {
             _pause.Show();
             _ui.Window.CaptureMouse(Capture.Off);

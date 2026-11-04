@@ -196,6 +196,8 @@ public sealed class Input
     private readonly Dictionary<SDL_Scancode, Key> _heldKeys = [];
     private readonly Dictionary<MouseButton, Key> _heldButtons = [];
     private readonly HashSet<MenuKey> _menuPressed = [];
+    /// <summary>The program pressed the menus' Back this frame (<see cref="PausePressed"/>).</summary>
+    private bool _backCalled;
     /// <summary>The menu keys held (the sliders step again while one is held).</summary>
     private readonly HashSet<MenuKey> _menuDown = [];
     private readonly HashSet<RawKey> _rawPressed = [];
@@ -302,8 +304,13 @@ public sealed class Input
     public void Press(MenuKey key)
     {
         _menuPressed.Add(key);
+        _backCalled |= key == MenuKey.Back;
         AnyPressed = true;
     }
+
+    /// <summary>The player asks to pause: Esc, Start, or a Back from the program (tests, the on-screen
+    /// controls). Not the gamepad's other Back: B goes back in the menus but is a binding in play.</summary>
+    public bool PausePressed => _pressed.Contains(Key.Escape) || _backCalled;
 
     /// <summary>Presses a game key for this frame from the program (automated tests).</summary>
     public void Press(Key key)
@@ -330,6 +337,7 @@ public sealed class Input
     {
         _pressed.Clear();
         _menuPressed.Clear();
+        _backCalled = false;
         _rawPressed.Clear();
         _clicked.Clear();
         PointerMoved = false;
