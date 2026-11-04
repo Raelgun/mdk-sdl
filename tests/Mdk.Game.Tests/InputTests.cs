@@ -153,7 +153,102 @@ public class InputTests
         // Start pauses and goes back in the menus, whatever the bindings.
         var input = NewInput();
         Assert.False(input.BindPad(Key.Jump, name));
-        Assert.Equal("A", input.DescribePad(Key.Jump));
+        Assert.False(input.AddPadBinding(Key.Jump, name));
+        Assert.False(input.SetPadBindings(Key.Jump, [name]));
+        Assert.Equal(["A"], input.PadControls(Key.Jump));
+    }
+
+    [Fact]
+    public void AddedPadButtonKeepsTheOthers()
+    {
+        // Personal tweak: the defaults stay beside it; the button leaves the action that had it.
+        var input = NewInput();
+        Assert.Equal(["Y", "RB", "D-pad right"], input.PadControls(Key.ItemNext));
+        Assert.True(input.AddPadBinding(Key.ZoomIn, "RB"));
+        Assert.Equal(["RB", "D-pad up"], input.PadControls(Key.ZoomIn));
+        Assert.Equal(["Y", "D-pad right"], input.PadControls(Key.ItemNext));
+
+        input.SetPadButton(PadButton.RightShoulder, Input.State.Down);
+        Assert.True(input.IsDown(Key.ZoomIn));
+        Assert.False(input.IsDown(Key.ItemNext));
+        input.SetPadButton(PadButton.RightShoulder, Input.State.Up);
+        input.SetPadButton(PadButton.DpadUp, Input.State.Down);
+        Assert.True(input.IsDown(Key.ZoomIn));
+    }
+
+    [Fact]
+    public void ClearedPadActionHasNoButtons()
+    {
+        var input = NewInput();
+        input.ClearPadBinding(Key.ItemNext);
+        Assert.Empty(input.PadControls(Key.ItemNext));
+        Assert.Equal("-", input.DescribePad(Key.ItemNext));
+
+        input.SetPadButton(PadButton.North, Input.State.Down);
+        Assert.False(input.IsDown(Key.ItemNext));
+        input.ResetPadBindings();
+        Assert.Equal(3, input.PadControls(Key.ItemNext).Count);
+    }
+
+    [Fact]
+    public void AddedKeyKeepsTheOthers()
+    {
+        // Personal tweak: the defaults stay beside it, a mouse button too; the key leaves the action that had it.
+        var input = NewInput();
+        Assert.True(input.AddBinding(Key.Jump, "F"));
+        Assert.True(input.AddBinding(Key.Jump, "Middle mouse"));
+        Assert.Equal(["F", "Space", "Middle mouse"], input.Controls(Key.Jump));
+
+        Assert.True(input.AddBinding(Key.Fire, "F"));
+        Assert.Equal(["Space", "Middle mouse"], input.Controls(Key.Jump));
+        Assert.Contains("F", input.Controls(Key.Fire));
+        Assert.Contains("Left mouse", input.Controls(Key.Fire));
+        Assert.False(input.AddBinding(Key.Jump, "Keypad"));
+    }
+
+    [Fact]
+    public void ClearedActionHasNoControls()
+    {
+        var input = NewInput();
+        input.ClearBinding(Key.Fire);
+        Assert.Empty(input.Controls(Key.Fire));
+        Assert.Equal("-", input.Describe(Key.Fire));
+        input.ResetBindings();
+        Assert.Equal(["Left Ctrl", "Right Ctrl", "Left mouse"], input.Controls(Key.Fire));
+    }
+
+    [Fact]
+    public void TheWheelsZoomIsAControlToo()
+    {
+        // Listed, cleared with the others, and it comes back by binding it.
+        var input = NewInput();
+        Assert.Equal(["=", "PageUp", "Wheel up"], input.Controls(Key.ZoomIn));
+
+        input.ClearBinding(Key.ZoomIn);
+        Assert.Empty(input.Controls(Key.ZoomIn));
+        input.Scoped = true;
+        input.AddWheel(WheelAway);
+        Assert.Equal(0f, input.ZoomWheel);
+
+        input.ClearMouse();
+        Assert.True(input.SetBindings(Key.ZoomIn, ["Wheel up"]));
+        Assert.Equal(["Wheel up"], input.Controls(Key.ZoomIn));
+        input.AddWheel(WheelAway);
+        Assert.Equal(1f, input.ZoomWheel);
+    }
+
+    [Fact]
+    public void SetBindingsWithOnlyUnknownNamesChangeNothing()
+    {
+        var input = NewInput();
+        Assert.False(input.SetBindings(Key.Jump, ["Keypad"]));
+        Assert.Equal(["Space"], input.Controls(Key.Jump));
+
+        // None clears; the unknown names of a list are skipped.
+        Assert.True(input.SetBindings(Key.Jump, []));
+        Assert.Empty(input.Controls(Key.Jump));
+        Assert.True(input.SetBindings(Key.Jump, ["Keypad", "F"]));
+        Assert.Equal(["F"], input.Controls(Key.Jump));
     }
 
     [Fact]

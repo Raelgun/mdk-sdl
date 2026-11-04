@@ -51,6 +51,10 @@ public sealed class MenuItems
         public bool Disabled;
         /// <summary>An option's label, made again when an option changes.</summary>
         public Func<string>? Label;
+        /// <summary>Personal tweak: a binding, cleared by Delete, Backspace or the gamepad's X.</summary>
+        public Action? Clear;
+        /// <summary>Personal tweak: a note, not an item: smaller than the rows.</summary>
+        public bool Hint;
         public float Grow = Small;
         public RectangleF Area;
 
@@ -73,10 +77,13 @@ public sealed class MenuItems
     private static readonly Vector4 ScrollThumb = new(1f, 1f, 1f, 0.6f);
     /// <summary>Between the two columns (<see cref="Column"/>).</summary>
     private const float ColumnGap = 24f;
+    private const int MaxControlsShown = 3;
     private const float Small = 0.65f;
     /// <summary>0.35 x 0.2 per tick.</summary>
     private const float GrowRate = 0.07f * 30f;
     private const float DisabledAlpha = 0.5f;
+    /// <summary>Personal tweak: a note is smaller than the rows it explains (<see cref="Small"/>).</summary>
+    private const float HintSize = 0.5f;
     private const int VolumeIncrement = 10;
     private static readonly float[] Sensitivities = [0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f, 2.5f, 3f];
     private const int DefaultSensitivity = 3;
@@ -221,12 +228,16 @@ public sealed class MenuItems
         {
             change(step);
             _ui.ApplySettings();
-            foreach (var option in _entries)
-            {
-                option.Text = option.Label?.Invoke() ?? option.Text;
-            }
-
+            Relabel();
             _ui.Play(_change);
+        }
+    }
+
+    private void Relabel()
+    {
+        foreach (var option in _entries)
+        {
+            option.Text = option.Label?.Invoke() ?? option.Text;
         }
     }
 
@@ -329,6 +340,14 @@ public sealed class MenuItems
 
         var selected = _entries[_selected];
         var pointed = !Scrolls && selected.Area.Contains(_ui.View.Pointer(input).X, _ui.View.Pointer(input).Y);
+        if (selected.Clear != null && (input.WasPressed(MenuKey.Delete) || input.WasPressed(MenuKey.Backspace)
+            || input.LastPadControl == GamepadMap.Name(PadButton.West)))
+        {
+            Click();
+            selected.Clear();
+            return;
+        }
+
         if (input.WasPressed(MenuKey.Accept) || (input.WasClicked(Pointer.Left) && pointed))
         {
             Click();
@@ -546,16 +565,22 @@ public sealed class MenuItems
         _shownRows = scrollRow > 0f ? ShownRows(row, FirstRow) : 0;
         Reveal();
         _textScale = row / _originalRow;
-        var font = UsesBigFont(_originalRow) ? _fonts.Big : _fonts.Small;
         var columns = _entries.Any(e => e.Column != Column.Both);
 
-        // Personal tweak: two columns too wide for the big font take the small one.
-        if (columns && font == _fonts.Big && 2f * ColumnWidth(font) * _textScale + ColumnGap > ScreenView.Size.X)
+        // Personal tweak: two columns take the small font and half the view each, whatever their texts:
+        // the page stays as it is while its bindings change.
+        var font = columns || !UsesBigFont(_originalRow) ? _fonts.Small : _fonts.Big;
+        _font = font;
+
+        // An action with many controls still too wide: the page's texts shrink to fit, as the selected
+        // item grows to full size.
+        var fullColumn = columns ? ColumnWidth(font) * _textScale : 0f;
+        var widestColumn = (ScreenView.Size.X - ColumnGap) / 2f;
+        if (fullColumn > widestColumn)
         {
-            font = _fonts.Small;
+            _textScale *= widestColumn / fullColumn;
         }
 
-        _font = font;
         var width = WidthOf(font, Column.Both) * _textScale;
 
         // A scrolling page's big font may be wider than the view: its texts shrink to fit beside the bar.
@@ -567,7 +592,6 @@ public sealed class MenuItems
         }
 
         var x = Alignment == Align.Left ? 0f : (ScreenView.Size.X - width) / 2f;
-        var columnWidth = columns ? ColumnWidth(font) * _textScale : 0f;
         var centre = ScreenView.Size.X / 2f;
         foreach (var entry in _entries)
         {
@@ -582,8 +606,8 @@ public sealed class MenuItems
             var top = RowTop(row, (Scrolls ? shown : entry.Row) + FirstRow);
             entry.Area = entry.Column switch
             {
-                Column.Left => new RectangleF(centre - ColumnGap / 2f - columnWidth, top, columnWidth, row),
-                Column.Right => new RectangleF(centre + ColumnGap / 2f, top, columnWidth, row),
+                Column.Left => new RectangleF(centre - ColumnGap / 2f - widestColumn, top, widestColumn, row),
+                Column.Right => new RectangleF(centre + ColumnGap / 2f, top, widestColumn, row),
                 _ => new RectangleF(x, top, width, row),
             };
         }
@@ -703,7 +727,7 @@ public sealed class MenuItems
             }
 
             var text = Encoding.ASCII.GetBytes(entry.Text);
-            var grow = entry.Grow * _textScale;
+            var grow = (entry.Hint ? HintSize : entry.Grow) * _textScale;
             var x = entry.Area.X + (entry.Area.Width - font.Width(text) * grow) / 2f;
             var alpha = entry.Disabled ? DisabledAlpha : 1f;
             _ui.View.Text(font, text, MathF.Round(x), entry.Area.Y + baseline, grow, alpha);
@@ -1010,7 +1034,7 @@ public sealed class MenuItems
     }
 
     /// <summary>The mouse, and the key bindings: choosing a binding waits for a key or a mouse
-    /// button (Esc cancels).</summary>
+    /// button to add (Esc cancels); Delete clears it.</summary>
     public void ShowControls(Action back)
     {
         ClearPage();
@@ -1029,11 +1053,16 @@ public sealed class MenuItems
                 _waitingEntry = entry;
                 _armed = false;
                 entry!.Text = $"{name}: press a key...";
-            }, null);
+            }, null)
+            {
+                Label = () => BindingText(key, name),
+                Clear = () => ChangeBindings(() => _ui.Input.ClearBinding(key)),
+            };
             bindings.Add(entry);
         }
 
         AddColumns(bindings);
+        Add(new Entry("Press Enter to add a key, Del to clear", Kind.Title, null, null) { Grow = 1f, Hint = true });
         AddItem("Default keys", () =>
         {
             _ui.Settings.Bindings.Clear();
@@ -1043,8 +1072,8 @@ public sealed class MenuItems
         EndPage(back);
     }
 
-    /// <summary>The gamepad's look, and its button bindings: choosing a binding waits for a button
-    /// (a key cancels: B and Start are buttons too). The sticks and Start (pause) are fixed.</summary>
+    /// <summary>The gamepad's look, and its button bindings: choosing a binding waits for a button to
+    /// add (a key cancels: B and Start are buttons too); X clears it. The sticks and Start (pause) are fixed.</summary>
     public void ShowGamepad(Action back)
     {
         ClearPage();
@@ -1063,11 +1092,16 @@ public sealed class MenuItems
                 _waitingEntry = entry;
                 _armed = false;
                 entry!.Text = $"{name}: press a button...";
-            }, null);
+            }, null)
+            {
+                Label = () => PadBindingText(key, name),
+                Clear = () => ChangeBindings(() => _ui.Input.ClearPadBinding(key)),
+            };
             bindings.Add(entry);
         }
 
         AddColumns(bindings);
+        Add(new Entry("Press A to add a button, X to clear", Kind.Title, null, null) { Grow = 1f, Hint = true });
         AddItem("Default buttons", () =>
         {
             _ui.Settings.PadBindings.Clear();
@@ -1131,7 +1165,17 @@ public sealed class MenuItems
         }
     }
 
-    /// <summary>The key or button pressed after the item was chosen becomes the binding.</summary>
+    /// <summary>Personal tweak: changes the bindings, remembers them and shows them all (a control taken
+    /// from another action changes that one's too).</summary>
+    private void ChangeBindings(Action change)
+    {
+        change();
+        _ui.Settings.KeepBindings(_ui.Input);
+        _ui.ApplySettings();
+        Relabel();
+    }
+
+    /// <summary>The key or button pressed after the item was chosen is added to the bindings.</summary>
     private void WaitForControl(Input input)
     {
         if (!_armed)
@@ -1158,15 +1202,15 @@ public sealed class MenuItems
 
         if (!input.WasPressed(MenuKey.Back))
         {
-            _ui.Settings.Bindings[key] = input.LastControl;
-            _ui.ApplySettings();
+            var control = input.LastControl;
+            ChangeBindings(() => input.AddBinding(key, control));
         }
 
         _waitingEntry!.Text = BindingText(key, Settings.Actions.First(a => a.Key == key).Name);
         _waiting = null;
     }
 
-    /// <summary>A gamepad button binds (not Start: it stays pause); a key or mouse button cancels.</summary>
+    /// <summary>A gamepad button is added (not Start: it stays pause); a key or mouse button cancels.</summary>
     private void WaitForButton(Input input, Key key)
     {
         var button = input.LastPadControl;
@@ -1175,19 +1219,31 @@ public sealed class MenuItems
             return;
         }
 
-        if (button.Length != 0 && input.BindPad(key, button))
+        if (button.Length != 0)
         {
-            _ui.Settings.PadBindings[key] = button;
-            _ui.ApplySettings();
+            ChangeBindings(() => input.AddPadBinding(key, button));
         }
 
         _waitingEntry!.Text = PadBindingText(key, Settings.PadActions.First(a => a.Key == key).Name);
         _waiting = null;
     }
 
-    private string BindingText(Key key, string name) => $"{name}: {_ui.Input.Describe(key)}";
+    private string BindingText(Key key, string name) => ControlsText(name, _ui.Input.Controls(key));
 
-    private string PadBindingText(Key key, string name) => $"{name}: {_ui.Input.DescribePad(key)}";
+    private string PadBindingText(Key key, string name) => ControlsText(name, _ui.Input.PadControls(key));
+
+    /// <summary>Personal tweak: an action and its controls, the first few and how many more (a column's
+    /// width), "-" with none.</summary>
+    private static string ControlsText(string name, List<string> controls)
+    {
+        if (controls.Count == 0)
+        {
+            return $"{name}: -";
+        }
+
+        var more = controls.Count - MaxControlsShown;
+        return $"{name}: {string.Join(", ", controls.Take(MaxControlsShown))}{(more > 0 ? $" +{more}" : "")}";
+    }
 
     /// <summary>Volumes go by 10 and wrap (0-100).</summary>
     public static int VolumeStep(int value, int step) => Wrap(value + step * VolumeIncrement, Settings.MaxVolume + VolumeIncrement);

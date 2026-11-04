@@ -28,6 +28,8 @@ public sealed class Settings
     private const string FileName = "settings.cfg";
     private const string BindPrefix = "bind.";
     private const string PadPrefix = "pad.";
+    /// <summary>Personal tweak: between an action's controls (bind.ZoomIn=W|PageUp); none clears it.</summary>
+    private const char ControlSeparator = '|';
     private const string ModPrefix = "mod.";
     private const string TouchPrefix = "touch.";
     /// <summary>The on-screen controls' opacity (%): never quite invisible.</summary>
@@ -360,16 +362,43 @@ public sealed class Settings
     public void Bind(Input input)
     {
         input.ResetBindings();
-        foreach (var (key, control) in Bindings)
+        foreach (var (key, controls) in Bindings)
         {
-            input.Bind(key, control);
+            input.SetBindings(key, controls.Split(ControlSeparator, StringSplitOptions.RemoveEmptyEntries));
         }
 
         input.ResetPadBindings();
-        foreach (var (key, control) in PadBindings)
+        foreach (var (key, controls) in PadBindings)
         {
-            input.BindPad(key, control);
+            input.SetPadBindings(key, controls.Split(ControlSeparator, StringSplitOptions.RemoveEmptyEntries));
         }
+    }
+
+    /// <summary>Personal tweak: remembers the listed actions' controls in <paramref name="input"/>: the
+    /// ones that differ from the defaults (a control taken from another action changes both).</summary>
+    public void KeepBindings(Input input)
+    {
+        var defaults = new Input();
+        foreach (var (key, _) in Actions)
+        {
+            Keep(Bindings, key, input.Controls(key), defaults.Controls(key));
+        }
+
+        foreach (var (key, _) in PadActions)
+        {
+            Keep(PadBindings, key, input.PadControls(key), defaults.PadControls(key));
+        }
+    }
+
+    private static void Keep(Dictionary<Key, string> bindings, Key key, List<string> controls, List<string> defaults)
+    {
+        if (controls.ToHashSet().SetEquals(defaults))
+        {
+            bindings.Remove(key);
+            return;
+        }
+
+        bindings[key] = string.Join(ControlSeparator, controls);
     }
 
     /// <summary>0-100 to a linear gain (the volume as a fraction, silent at 0).</summary>

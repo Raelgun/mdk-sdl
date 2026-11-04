@@ -346,6 +346,55 @@ public sealed class Input
     /// <paramref name="key"/>, instead of its other bindings. Returns false for an unknown name.</summary>
     public bool Bind(Key key, string control)
     {
+        if (!IsControl(control))
+        {
+            return false;
+        }
+
+        Unbind(key);
+        return AddBinding(key, control);
+    }
+
+    /// <summary>Personal tweak: <paramref name="key"/> exactly these controls: none clears it. Unknown
+    /// names don't bind; with only those it keeps what it had (returns false).</summary>
+    public bool SetBindings(Key key, IReadOnlyCollection<string> controls)
+    {
+        var known = controls.Where(IsControl).ToList();
+        if (controls.Count != 0 && known.Count == 0)
+        {
+            return false;
+        }
+
+        ClearBinding(key);
+        known.ForEach(control => AddBinding(key, control));
+        return true;
+    }
+
+    /// <summary>Personal tweak: <paramref name="key"/> has no controls, nor the wheel's zoom.</summary>
+    public void ClearBinding(Key key)
+    {
+        Unbind(key);
+        if (WheelZoom(key) is { } wheel)
+        {
+            _wheelZoom.Remove(wheel);
+        }
+    }
+
+    /// <summary>The wheel's direction that zooms by default.</summary>
+    private static MouseButton? WheelZoom(Key key) => key switch
+    {
+        Key.ZoomIn => MouseButton.WheelUp,
+        Key.ZoomOut => MouseButton.WheelDown,
+        _ => null,
+    };
+
+    private static bool IsControl(string control) =>
+        ParseButton(control) != null || SDL3.SDL_GetScancodeFromName(control) != SDL_Scancode.SDL_SCANCODE_UNKNOWN;
+
+    /// <summary>Personal tweak: a key or mouse button (as <see cref="Bind"/>) also holds
+    /// <paramref name="key"/>, which keeps its other bindings; another action of the same layer loses it.</summary>
+    public bool AddBinding(Key key, string control)
+    {
         var button = ParseButton(control);
         var scancode = button == null ? SDL3.SDL_GetScancodeFromName(control) : SDL_Scancode.SDL_SCANCODE_UNKNOWN;
         if (button == null && scancode == SDL_Scancode.SDL_SCANCODE_UNKNOWN)
@@ -353,7 +402,6 @@ public sealed class Input
             return false;
         }
 
-        Unbind(key);
         var scope = IsScopeAction(key);
         if (button is { } bound)
         {
@@ -426,14 +474,47 @@ public sealed class Input
     /// instead of its other buttons. Returns false for an unknown name, and for Start (pause).</summary>
     public bool BindPad(Key key, string control)
     {
-        if (GamepadMap.Parse(control) is not { } button || button == PadButton.Start)
+        if (!IsPadControl(control))
         {
             return false;
         }
 
+        ClearPadBinding(key);
+        return AddPadBinding(key, control);
+    }
+
+    /// <summary>Personal tweak: <paramref name="key"/> exactly these buttons, as <see cref="SetBindings"/>.</summary>
+    public bool SetPadBindings(Key key, IReadOnlyCollection<string> controls)
+    {
+        var known = controls.Where(IsPadControl).ToList();
+        if (controls.Count != 0 && known.Count == 0)
+        {
+            return false;
+        }
+
+        ClearPadBinding(key);
+        known.ForEach(control => AddPadBinding(key, control));
+        return true;
+    }
+
+    /// <summary>Personal tweak: <paramref name="key"/> has no gamepad buttons.</summary>
+    public void ClearPadBinding(Key key)
+    {
         foreach (var bound in _padKeys.Where(b => b.Value == key).Select(b => b.Key).ToList())
         {
             _padKeys.Remove(bound);
+        }
+    }
+
+    private static bool IsPadControl(string control) => GamepadMap.Parse(control) is { } button && button != PadButton.Start;
+
+    /// <summary>Personal tweak: a gamepad button also holds <paramref name="key"/>, which keeps its other
+    /// buttons; another action loses it. False as <see cref="BindPad"/>.</summary>
+    public bool AddPadBinding(Key key, string control)
+    {
+        if (GamepadMap.Parse(control) is not { } button || button == PadButton.Start)
+        {
+            return false;
         }
 
         _padKeys[button] = key;
@@ -465,6 +546,28 @@ public sealed class Input
         }
 
         return "-";
+    }
+
+    /// <summary>Personal tweak: the names of all a key's gamepad buttons, in a fixed order.</summary>
+    public List<string> PadControls(Key key) =>
+        [.. _padKeys.Where(b => b.Value == key).Select(b => b.Key).Order().Select(GamepadMap.Name)];
+
+    /// <summary>Personal tweak: the names of all a key's keys and mouse buttons (the wheel's zoom too), in
+    /// a fixed order: rebinding reorders the tables.</summary>
+    public List<string> Controls(Key key)
+    {
+        var scope = IsScopeAction(key);
+        var buttons = (scope ? _scopeButtons : _buttonKeys).Where(b => b.Value == key).Select(b => b.Key).ToList();
+        if (WheelZoom(key) is { } wheel && _wheelZoom.Contains(wheel))
+        {
+            buttons.Add(wheel);
+        }
+
+        return
+        [
+            .. (scope ? _scopeKeys : _keys).Where(k => k.Value == key).Select(k => k.Key).Order().Select(k => SDL3.SDL_GetScancodeName(k) ?? ""),
+            .. buttons.Order().Select(ButtonName),
+        ];
     }
 
     /// <summary>The name of a key's first binding, or "-".</summary>

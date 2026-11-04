@@ -89,6 +89,55 @@ public class FlowTests
     }
 
     [Fact]
+    public void SeveralAndNoControlsAreRemembered()
+    {
+        // Personal tweak: what the menus changed comes back from the file, older single names too.
+        var input = new Input();
+        input.AddBinding(Key.ZoomIn, "W");
+        input.AddBinding(Key.Fire, "F");
+        input.ClearBinding(Key.Jump);
+        input.AddPadBinding(Key.ZoomIn, "RB");
+        input.ClearPadBinding(Key.Jump);
+        var settings = new Settings();
+        settings.KeepBindings(input);
+
+        var read = Settings.Parse(settings.Format());
+        Assert.Equal("", read.Bindings[Key.Jump]);
+        Assert.False(read.Bindings.ContainsKey(Key.Forward));
+        Assert.False(read.PadBindings.ContainsKey(Key.Fire));
+
+        var again = new Input();
+        read.Bind(again);
+        foreach (var (key, _) in Settings.Actions)
+        {
+            Assert.Equal(input.Controls(key), again.Controls(key));
+        }
+
+        foreach (var (key, _) in Settings.PadActions)
+        {
+            Assert.Equal(input.PadControls(key), again.PadControls(key));
+        }
+
+        var older = Settings.Parse("bind.Jump=F\npad.Jump=RB\n");
+        older.Bind(again);
+        Assert.Equal(["F"], again.Controls(Key.Jump));
+        Assert.Equal(["RB"], again.PadControls(Key.Jump));
+    }
+
+    [Fact]
+    public void DefaultControlsAreNotWritten()
+    {
+        // Personal tweak: added and cleared back to the defaults' set, nothing stays in the file.
+        var input = new Input();
+        input.ClearBinding(Key.Jump);
+        input.AddBinding(Key.Jump, "Space");
+        var settings = new Settings();
+        settings.KeepBindings(input);
+        Assert.Empty(settings.Bindings);
+        Assert.Empty(settings.PadBindings);
+    }
+
+    [Fact]
     public void BadSettingsKeepDefaults()
     {
         var read = Settings.Parse("master_volume=loud\nmusic_volume=500\nunknown=1\nbind.Nothing=W\ngraphics=7\nantialiasing=X16\ntextures=8K\n");
