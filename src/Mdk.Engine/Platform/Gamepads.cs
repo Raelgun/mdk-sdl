@@ -18,8 +18,11 @@ internal sealed unsafe class Gamepads : IDisposable
 
     private static readonly Key[] WalkKeys = [Key.Forward, Key.Back, Key.StrafeLeft, Key.StrafeRight];
     private static readonly MenuKey[] SteerKeys = [MenuKey.Up, MenuKey.Down, MenuKey.Left, MenuKey.Right];
+    private static readonly Key[] ZoomKeys = [Key.ZoomIn, Key.ZoomOut];
 
     private readonly Dictionary<SDL_JoystickID, IntPtr> _open = [];
+    /// <summary>The zoom keys the left stick holds.</summary>
+    private readonly HashSet<Key> _stickZooms = [];
     private Vector2 _left;
     private Vector2 _right;
     private ulong _lastTicks;
@@ -65,7 +68,19 @@ internal sealed unsafe class Gamepads : IDisposable
 
         foreach (var key in WalkKeys)
         {
-            input.SetPad(key, GamepadMap.Walks(_left, key) ? Input.State.Down : Input.State.Up);
+            input.SetPad(key, GamepadMap.Walks(_left, key, input.Scoped) ? Input.State.Down : Input.State.Up);
+        }
+
+        // Personal tweak: in the scope the stick zooms. Only its own changes count: the d-pad's zoom
+        // buttons hold the same keys.
+        foreach (var key in ZoomKeys)
+        {
+            var zooms = GamepadMap.Zooms(_left, key, input.Scoped);
+            if (zooms != _stickZooms.Contains(key))
+            {
+                _ = zooms ? _stickZooms.Add(key) : _stickZooms.Remove(key);
+                input.SetPad(key, zooms ? Input.State.Down : Input.State.Up);
+            }
         }
 
         foreach (var key in SteerKeys)
@@ -104,6 +119,13 @@ internal sealed unsafe class Gamepads : IDisposable
         {
             input.SetPadButton(button, Input.State.Up);
         }
+
+        foreach (var key in _stickZooms)
+        {
+            input.SetPad(key, Input.State.Up);
+        }
+
+        _stickZooms.Clear();
     }
 
     private void Axis(SDL_GamepadAxis axis, float value, Input input)

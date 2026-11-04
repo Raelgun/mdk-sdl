@@ -15,7 +15,7 @@ public enum PadButton
 /// <code>
 ///   LT sniper   LB item ◄            RB item ►   RT fire
 ///   d-pad: ▲ zoom in, ▼ zoom out, ◄ ► items      Y item ►
-///   left stick: walk, L3 always run          X use   B turbo
+///   left stick: walk (scope: ▲ ▼ zoom), L3 always run   X use   B turbo
 ///   Start: pause                                 A jump
 /// </code>
 /// In the menus: the d-pad or the left stick, A accepts, B and Start go back.</summary>
@@ -86,13 +86,24 @@ public static class GamepadMap
         _ => null,
     };
 
-    /// <summary>The left stick holds <paramref name="key"/> (walking; its y is down, SDL's).</summary>
-    public static bool Walks(Vector2 stick, Key key) => key switch
+    /// <summary>The left stick holds <paramref name="key"/> (walking; its y is down, SDL's). Personal
+    /// tweak: while <paramref name="scoped"/> its up and down zoom instead (<see cref="Zooms"/>), as the
+    /// keys can: the right stick aims.</summary>
+    public static bool Walks(Vector2 stick, Key key, bool scoped = false) => key switch
     {
-        Key.Forward => stick.Y < -Push,
-        Key.Back => stick.Y > Push,
+        Key.Forward => !scoped && stick.Y < -Push,
+        Key.Back => !scoped && stick.Y > Push,
         Key.StrafeLeft => stick.X < -Push,
         Key.StrafeRight => stick.X > Push,
+        _ => false,
+    };
+
+    /// <summary>Personal tweak: the left stick holds a zoom <paramref name="key"/> while
+    /// <paramref name="scoped"/>.</summary>
+    public static bool Zooms(Vector2 stick, Key key, bool scoped) => scoped && key switch
+    {
+        Key.ZoomIn => stick.Y < -Push,
+        Key.ZoomOut => stick.Y > Push,
         _ => false,
     };
 

@@ -54,6 +54,24 @@ public class GamepadMapTests
     }
 
     [Fact]
+    public void TheLeftStickZoomsInTheScope()
+    {
+        // Personal tweak: in the scope up and down zoom instead of walking; the sides still strafe.
+        var up = new Vector2(0f, -0.9f);
+        var downRight = new Vector2(0.8f, 0.8f);
+        Assert.False(GamepadMap.Walks(up, Key.Forward, scoped: true));
+        Assert.True(GamepadMap.Zooms(up, Key.ZoomIn, scoped: true));
+        Assert.False(GamepadMap.Zooms(up, Key.ZoomOut, scoped: true));
+        Assert.False(GamepadMap.Walks(downRight, Key.Back, scoped: true));
+        Assert.True(GamepadMap.Walks(downRight, Key.StrafeRight, scoped: true));
+        Assert.True(GamepadMap.Zooms(downRight, Key.ZoomOut, scoped: true));
+
+        // On foot it doesn't zoom, and a slight push does nothing.
+        Assert.False(GamepadMap.Zooms(up, Key.ZoomIn, scoped: false));
+        Assert.False(GamepadMap.Zooms(new Vector2(0f, -0.2f), Key.ZoomIn, scoped: true));
+    }
+
+    [Fact]
     public void TheLeftStickSteersTheMenus()
     {
         Assert.Equal([MenuKey.Up], Steering(new Vector2(0f, -0.9f)));
